@@ -169,9 +169,9 @@ const CameraCapture = ({ onCapture, onClose }) => {
                     />
                     <button
                       onClick={() => handleRemoveImage(index)}
-                      className="absolute top-0 right-0 translate-x-1/2 -translate-y-1/2 size-6 bg-ruby rounded-full flex items-center justify-center shadow-md active:scale-90 transition-transform"
+                      className="absolute top-1 right-1 size-5 bg-ruby/90 rounded-full flex items-center justify-center shadow active:scale-90 transition-transform"
                     >
-                      <X className="size-4 text-white" />
+                      <X className="size-3 text-white" />
                     </button>
                   </div>
                 ))}
