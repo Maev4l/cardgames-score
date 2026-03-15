@@ -1,6 +1,7 @@
 // Camera capture using react-webcam for reliable lifecycle management
 // Supports capturing multiple photos before submitting for detection
-import { useState, useRef, useCallback } from 'react';
+// Checks permission status to show friendly UI instead of browser prompt
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2, SwitchCamera, VideoOff, Send } from 'lucide-react';
@@ -13,7 +14,52 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [cameraError, setCameraError] = useState(null);
   const [facingMode, setFacingMode] = useState('environment');
   const [capturedImages, setCapturedImages] = useState([]);
+  const [permissionStatus, setPermissionStatus] = useState('checking'); // 'checking' | 'granted' | 'prompt' | 'denied'
+  const [showCamera, setShowCamera] = useState(false);
   const webcamRef = useRef(null);
+
+  // Check camera permission on mount
+  useEffect(() => {
+    const checkPermission = async () => {
+      try {
+        // Permissions API (not supported on all browsers, especially iOS)
+        if (navigator.permissions?.query) {
+          const result = await navigator.permissions.query({ name: 'camera' });
+          setPermissionStatus(result.state);
+          // Auto-show camera if already granted
+          if (result.state === 'granted') {
+            setShowCamera(true);
+          }
+          // Listen for permission changes
+          result.onchange = () => setPermissionStatus(result.state);
+        } else {
+          // Fallback: assume prompt needed (iOS Safari doesn't support Permissions API)
+          setPermissionStatus('prompt');
+        }
+      } catch {
+        // Permissions API not supported for camera, assume prompt
+        setPermissionStatus('prompt');
+      }
+    };
+    checkPermission();
+  }, []);
+
+  // Request camera permission explicitly
+  const requestPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Got permission, stop the test stream
+      stream.getTracks().forEach(track => track.stop());
+      setPermissionStatus('granted');
+      setShowCamera(true);
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setPermissionStatus('denied');
+      } else {
+        setCameraError(err.message || 'Failed to access camera');
+      }
+    }
+  };
 
   const videoConstraints = {
     facingMode,
@@ -84,15 +130,17 @@ const CameraCapture = ({ onCapture, onClose }) => {
           Capture Cards {capturedImages.length > 0 && `(${capturedImages.length})`}
         </h2>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleSwitchCamera}
-            className="text-ivory/80 hover:text-ivory hover:bg-ivory/10"
-            title="Switch camera"
-          >
-            <SwitchCamera className="size-5" />
-          </Button>
+          {showCamera && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSwitchCamera}
+              className="text-ivory/80 hover:text-ivory hover:bg-ivory/10"
+              title="Switch camera"
+            >
+              <SwitchCamera className="size-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -106,7 +154,33 @@ const CameraCapture = ({ onCapture, onClose }) => {
 
       {/* Camera View */}
       <div className="flex-1 relative bg-black">
-        {loading ? (
+        {/* Permission request UI */}
+        {!showCamera && !loading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8">
+            <Camera className="size-16 text-ivory/30" />
+            {permissionStatus === 'checking' ? (
+              <p className="text-ivory/60">Checking camera access...</p>
+            ) : permissionStatus === 'denied' ? (
+              <>
+                <p className="text-ivory/60 text-center">Camera access denied</p>
+                <p className="text-ivory/40 text-sm text-center">
+                  Please enable camera in your browser settings
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-ivory/60 text-center">Camera access needed to scan cards</p>
+                <Button
+                  onClick={requestPermission}
+                  className="bg-gold text-charcoal hover:bg-gold/90"
+                >
+                  <Camera className="size-5 mr-2" />
+                  Enable Camera
+                </Button>
+              </>
+            )}
+          </div>
+        ) : loading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <Loader2 className="size-12 text-gold animate-spin mb-4" />
             <p className="text-ivory/60">Analyzing {capturedImages.length} image{capturedImages.length !== 1 && 's'}...</p>
@@ -190,8 +264,8 @@ const CameraCapture = ({ onCapture, onClose }) => {
         )}
       </div>
 
-      {/* Action Buttons */}
-      {!loading && !cameraError && (
+      {/* Action Buttons - only show when camera is active */}
+      {showCamera && !loading && !cameraError && (
         <div className="p-6 bg-charcoal/95 flex justify-center gap-4">
           <Button
             onClick={handleCapture}
