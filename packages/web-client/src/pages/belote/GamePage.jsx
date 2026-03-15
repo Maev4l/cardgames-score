@@ -274,53 +274,7 @@ const GamePage = () => {
                 <TrumpSelector value={trump} onChange={setTrump} />
               </div>
 
-              {/* Points Entry - Total per round is 162 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-charcoal/60 text-sm block mb-2">
-                    {game.teams?.a.name} points
-                  </label>
-                  <input
-                    type="number"
-                    value={pointsA || ''}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
-                      setPointsA(val);
-                      setPointsB(162 - val);
-                    }}
-                    className="w-full h-12 px-4 rounded-lg border border-charcoal/20 text-center text-xl bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-charcoal/60 text-sm block mb-2">
-                    {game.teams?.b.name} points
-                  </label>
-                  <input
-                    type="number"
-                    value={pointsB || ''}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
-                      setPointsB(val);
-                      setPointsA(162 - val);
-                    }}
-                    className="w-full h-12 px-4 rounded-lg border border-charcoal/20 text-center text-xl bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Camera Button - opens team selection first */}
-              <Button
-                variant="outline"
-                onClick={() => setShowTeamSelect(true)}
-                className="w-full h-12 border-charcoal/20 text-charcoal"
-              >
-                <Camera className="size-5 mr-2" />
-                Scan Pile
-              </Button>
-
-              {/* Bonuses */}
+              {/* Bonuses - moved above points so Capot can hide them */}
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -342,6 +296,57 @@ const GamePage = () => {
                 </label>
               </div>
 
+              {/* Points Entry - hidden when Capot (winner takes all 252) */}
+              {!capot && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-charcoal/60 text-sm block mb-2">
+                        {game.teams?.a.name} points
+                      </label>
+                      <input
+                        type="number"
+                        value={pointsA || ''}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setPointsA(val);
+                          setPointsB(162 - val);
+                        }}
+                        className="w-full h-12 px-4 rounded-lg border border-charcoal/20 text-center text-xl bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-charcoal/60 text-sm block mb-2">
+                        {game.teams?.b.name} points
+                      </label>
+                      <input
+                        type="number"
+                        value={pointsB || ''}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setPointsB(val);
+                          setPointsA(162 - val);
+                        }}
+                        className="w-full h-12 px-4 rounded-lg border border-charcoal/20 text-center text-xl bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Camera Button - opens team selection first */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTeamSelect(true)}
+                    className="w-full h-12 border-charcoal/20 text-charcoal"
+                  >
+                    <Camera className="size-5 mr-2" />
+                    Scan Pile
+                  </Button>
+                </>
+              )}
+
+              {/* Error - moved here */}
               {/* Error */}
               {error && (
                 <p className="text-ruby text-sm text-center">{error}</p>
