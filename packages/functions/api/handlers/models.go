@@ -26,5 +26,6 @@ type DetectRequest struct {
 
 // DetectResponse is the response payload
 type DetectResponse struct {
-	Cards []Card `json:"cards"`
+	Cards        []Card   `json:"cards"`
+	CardsByImage [][]Card `json:"cardsByImage"`
 }

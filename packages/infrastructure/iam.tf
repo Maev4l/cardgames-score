@@ -10,7 +10,8 @@ data "aws_iam_policy_document" "api" {
       "bedrock:ListInferenceProfiles"
     ]
     resources = [
-      "arn:aws:bedrock:eu-central-1:*:*",
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*:*:inference-profile/*",
     ]
   }
   statement {

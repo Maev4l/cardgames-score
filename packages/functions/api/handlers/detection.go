@@ -53,23 +53,31 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 		}
 	}
 
-	// Detect cards from all images
+	// Detect cards from all images, keeping track per image
 	var allCards []services.Card
+	var cardsByImage [][]Card
 	for i, img := range images {
 		cards, err := h.bedrock.DetectCards(c.Request.Context(), img.Image, img.MediaType)
 		if err != nil {
 			log.Error().Msgf("Card detection failed for image %d: %s", i, err.Error())
-			// Continue with other images instead of failing completely
+			cardsByImage = append(cardsByImage, []Card{})
 			continue
 		}
+		// Convert to handler Card type for this image
+		imageCards := make([]Card, len(cards))
+		for j, card := range cards {
+			imageCards[j] = Card{Rank: card.Rank, Suit: card.Suit}
+		}
+		cardsByImage = append(cardsByImage, imageCards)
 		allCards = append(allCards, cards...)
 	}
 
-	// Deduplicate cards across all images
+	// Deduplicate cards across all images for flat list
 	responseCards := deduplicateCards(allCards)
 
 	c.JSON(http.StatusOK, DetectResponse{
-		Cards: responseCards,
+		Cards:        responseCards,
+		CardsByImage: cardsByImage,
 	})
 }
 

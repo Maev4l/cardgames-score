@@ -7,6 +7,7 @@ module "api" {
     handler  = "bootstrap"
   }
   architecture = "arm64"
+  timeout      = 60
 
   environment_variables = {
     GAMES_TABLE = aws_dynamodb_table.games.name
