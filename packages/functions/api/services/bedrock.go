@@ -63,7 +63,7 @@ func NewBedrockService(region string) (*BedrockService, error) {
 
 	return &BedrockService{
 		client:  bedrockruntime.NewFromConfig(cfg),
-		modelID: "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+		modelID: "eu.anthropic.claude-sonnet-4-6",
 	}, nil
 }
 
