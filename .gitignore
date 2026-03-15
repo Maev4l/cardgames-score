@@ -1,0 +1,11 @@
+settings.local.json
+bin/
+dist/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+tfplan
+
+output.json

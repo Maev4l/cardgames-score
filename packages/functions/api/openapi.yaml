@@ -1,0 +1,522 @@
+openapi: 3.1.0
+info:
+  title: Cardgames Score API
+  description: API for card game scoring (Belote) and card detection using Claude on AWS Bedrock
+  version: 2.0.0
+
+servers:
+  - url: /
+    description: API Gateway
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito JWT token
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    TeamScore:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Team name
+        score:
+          type: integer
+          description: Current score
+      required:
+        - name
+        - score
+
+    Teams:
+      type: object
+      properties:
+        a:
+          $ref: "#/components/schemas/TeamScore"
+        b:
+          $ref: "#/components/schemas/TeamScore"
+      required:
+        - a
+        - b
+
+    Game:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: ["belote", "tarot"]
+        status:
+          type: string
+          enum: ["active", "finished"]
+        teams:
+          $ref: "#/components/schemas/Teams"
+        targetScore:
+          type: integer
+          description: Score needed to win (1000 or 2000)
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - status
+        - createdAt
+
+    Round:
+      type: object
+      properties:
+        roundNum:
+          type: integer
+        taker:
+          type: string
+          enum: ["A", "B"]
+          description: Team that took the contract
+        trump:
+          type: string
+          enum: ["hearts", "diamonds", "clubs", "spades"]
+        scores:
+          type: object
+          properties:
+            A:
+              type: integer
+            B:
+              type: integer
+        belote:
+          type: boolean
+          description: Belote bonus (+20)
+        capot:
+          type: boolean
+          description: Capot bonus (252 total)
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - roundNum
+        - taker
+        - trump
+        - scores
+        - createdAt
+
+    CreateGameRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: ["belote", "tarot"]
+        teams:
+          $ref: "#/components/schemas/Teams"
+        targetScore:
+          type: integer
+          enum: [1000, 2000]
+      required:
+        - type
+
+    AddRoundRequest:
+      type: object
+      properties:
+        taker:
+          type: string
+          enum: ["A", "B"]
+        trump:
+          type: string
+          enum: ["hearts", "diamonds", "clubs", "spades"]
+        scores:
+          type: object
+          properties:
+            A:
+              type: integer
+            B:
+              type: integer
+          required:
+            - A
+            - B
+        belote:
+          type: boolean
+        capot:
+          type: boolean
+      required:
+        - taker
+        - trump
+        - scores
+
+    Card:
+      type: object
+      properties:
+        rank:
+          type: string
+          description: "Card rank: 7, 8, 9, 10, Jack, Queen, King, or Ace"
+          enum: ["7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]
+        suit:
+          type: string
+          description: "Card suit"
+          enum: ["Hearts", "Diamonds", "Clubs", "Spades"]
+      required:
+        - rank
+        - suit
+
+    ImageData:
+      type: object
+      description: "Single image with metadata"
+      properties:
+        image:
+          type: string
+          description: "Base64-encoded image data"
+        mediaType:
+          type: string
+          description: "MIME type of the image"
+          enum: ["image/jpeg", "image/png", "image/webp", "image/gif"]
+      required:
+        - image
+        - mediaType
+
+    DetectRequest:
+      type: object
+      description: "Supports single image (legacy) or multiple images"
+      properties:
+        image:
+          type: string
+          description: "Base64-encoded image data (legacy, use images array instead)"
+        mediaType:
+          type: string
+          description: "MIME type (legacy, use images array instead)"
+          enum: ["image/jpeg", "image/png", "image/webp", "image/gif"]
+        images:
+          type: array
+          description: "Array of images to process (preferred)"
+          items:
+            $ref: "#/components/schemas/ImageData"
+
+    DetectResponse:
+      type: object
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+          description: "List of detected playing cards (deduplicated)"
+
+paths:
+  /detections:
+    post:
+      summary: Detect playing cards in images
+      description: |
+        Analyzes one or more images using Claude on AWS Bedrock to identify playing cards.
+        Designed for French Belote (32-card deck): 7, 8, 9, 10, J, Q, K, A in each suit.
+        Cards are detected from all images and deduplicated based on rank+suit.
+        Supports both single image (legacy) and multiple images formats.
+      operationId: detectCards
+      tags:
+        - Detection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DetectRequest"
+            examples:
+              single:
+                summary: Single image (legacy)
+                value:
+                  image: "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+                  mediaType: "image/jpeg"
+              multiple:
+                summary: Multiple images (preferred)
+                value:
+                  images:
+                    - image: "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+                      mediaType: "image/jpeg"
+                    - image: "/9j/4BBQSkZJRgABAQAAAQABAAD..."
+                      mediaType: "image/jpeg"
+      responses:
+        "200":
+          description: Cards detected successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectResponse"
+              example:
+                cards:
+                  - rank: "Ace"
+                    suit: "Spades"
+                  - rank: "10"
+                    suit: "Hearts"
+                  - rank: "Queen"
+                    suit: "Diamonds"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: "Invalid mediaType. Supported: image/jpeg, image/png, image/webp, image/gif"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: "Card detection failed"
+
+  /games:
+    post:
+      summary: Create a new game
+      description: Creates a new card game session for the authenticated user
+      operationId: createGame
+      tags:
+        - Games
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameRequest"
+            example:
+              type: "belote"
+              teams:
+                a: { name: "Nous", score: 0 }
+                b: { name: "Eux", score: 0 }
+              targetScore: 1000
+      responses:
+        "201":
+          description: Game created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: User not approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      summary: List user's games
+      description: Returns all games for the authenticated user
+      operationId: listGames
+      tags:
+        - Games
+      parameters:
+        - name: type
+          in: query
+          description: Filter by game type
+          schema:
+            type: string
+            enum: ["belote", "tarot"]
+      responses:
+        "200":
+          description: List of games
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  games:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Game"
+        "403":
+          description: User not approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /games/{id}:
+    get:
+      summary: Get game with rounds
+      description: Returns a specific game and all its rounds
+      operationId: getGame
+      tags:
+        - Games
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          description: Game type (defaults to belote)
+          schema:
+            type: string
+            enum: ["belote", "tarot"]
+      responses:
+        "200":
+          description: Game details with rounds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  game:
+                    $ref: "#/components/schemas/Game"
+                  rounds:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Round"
+        "404":
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Update game
+      description: Update game status or teams
+      operationId: updateGame
+      tags:
+        - Games
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: ["belote", "tarot"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: ["active", "finished"]
+                teams:
+                  $ref: "#/components/schemas/Teams"
+      responses:
+        "200":
+          description: Game updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "404":
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /games/{id}/rounds:
+    post:
+      summary: Add round to game
+      description: Adds a new round and updates game scores
+      operationId: addRound
+      tags:
+        - Games
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: ["belote", "tarot"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddRoundRequest"
+            example:
+              taker: "A"
+              trump: "hearts"
+              scores: { A: 120, B: 42 }
+              belote: true
+              capot: false
+      responses:
+        "201":
+          description: Round added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Round"
+        "404":
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /games/{id}/rounds/{num}:
+    delete:
+      summary: Delete round (undo)
+      description: Removes a round from the game
+      operationId: deleteRound
+      tags:
+        - Games
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: num
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: ["belote", "tarot"]
+      responses:
+        "200":
+          description: Round deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+tags:
+  - name: Games
+    description: Game management endpoints (requires cardgames-score group)
+  - name: Detection
+    description: Card detection endpoints

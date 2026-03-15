@@ -1,0 +1,17 @@
+{
+  "name": "cardgames-score",
+  "version": "1.0.0",
+  "scripts": {
+    "infra:plan": "terraform -chdir=packages/infrastructure plan",
+    "infra:apply": "terraform -chdir=packages/infrastructure apply -auto-approve",
+    "infra:output": "terraform -chdir=packages/infrastructure output -json > packages/web-client/output.json",
+    "backend:build": "make -C packages/functions package build",
+    "backend:deploy": "make -C packages/functions package && yarn infra:apply",
+    "frontend:serve": "yarn --cwd packages/web-client dev",
+    "frontend:build": "yarn infra:output && yarn --cwd packages/web-client build",
+    "frontend:sync": "aws s3 sync packages/web-client/dist s3://$(terraform -chdir=packages/infrastructure output -raw webclient_bucket) --delete",
+    "frontend:invalidate": "aws cloudfront create-invalidation --path '/*' --distribution-id $(terraform -chdir=packages/infrastructure output -raw cloudfront_distribution_id)",
+    "frontend:deploy": "yarn frontend:build && yarn frontend:sync && yarn frontend:invalidate"
+  },
+  "private": true
+}
