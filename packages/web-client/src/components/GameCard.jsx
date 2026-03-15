@@ -79,9 +79,14 @@ const GameCard = ({ game, onClick, onDelete }) => {
 
         {/* Footer */}
         <div className="mt-3 pt-3 border-t border-charcoal/10 flex items-center justify-between text-xs">
-          <span className="text-charcoal/40">
-            Target: {game.targetScore}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-charcoal/10 rounded text-charcoal/60 capitalize">
+              {game.type}
+            </span>
+            <span className="text-charcoal/40">
+              Target: {game.targetScore}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-charcoal/40">
               {formatDate(game.createdAt)}
