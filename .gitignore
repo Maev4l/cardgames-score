@@ -1,6 +1,7 @@
 settings.local.json
 bin/
 dist/
+node_modules/
 
 # Terraform
 .terraform/

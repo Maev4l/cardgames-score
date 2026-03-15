@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="feltGradient" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1f5c36"/>
+      <stop offset="100%" stop-color="#0f2d1a"/>
+    </radialGradient>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0d875"/>
+      <stop offset="50%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#aa8c2c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full background -->
+  <rect width="512" height="512" fill="url(#feltGradient)"/>
+
+  <!-- Gold border ring - within 80% safe zone (r=150 keeps within ~106-406px) -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#goldGradient)" stroke-width="4"/>
+
+  <!-- Inner decorative ring -->
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#d4af37" stroke-width="1" opacity="0.3"/>
+
+  <!-- Four card suits - tighter arrangement for safe zone -->
+  <!-- Spade (top) -->
+  <g transform="translate(256, 175)">
+    <path d="M0 -25 C-15 -6, -22 9, -22 22 C-22 34, -9 41, 0 32 C9 41, 22 34, 22 22 C22 9, 15 -6, 0 -25 Z M-7 32 L-7 44 L7 44 L7 32"
+          fill="#f5f0e8"/>
+  </g>
+
+  <!-- Heart (right) -->
+  <g transform="translate(320, 256)">
+    <path d="M0 22 C-22 6, -22 -14, -11 -22 C0 -30, 11 -22, 11 -22 C11 -22, 22 -30, 33 -22 C44 -14, 44 6, 22 22 Z"
+          fill="#c41e3a" transform="translate(-11, 0)"/>
+  </g>
+
+  <!-- Diamond (bottom) -->
+  <g transform="translate(256, 337)">
+    <path d="M0 -28 L18 0 L0 28 L-18 0 Z" fill="#c41e3a"/>
+  </g>
+
+  <!-- Club (left) -->
+  <g transform="translate(192, 256)">
+    <circle cx="0" cy="-12" r="11" fill="#f5f0e8"/>
+    <circle cx="-11" cy="5" r="11" fill="#f5f0e8"/>
+    <circle cx="11" cy="5" r="11" fill="#f5f0e8"/>
+    <rect x="-4" y="6" width="8" height="18" fill="#f5f0e8"/>
+  </g>
+
+  <!-- Center "A" for Atout -->
+  <text x="256" y="268"
+        font-family="Georgia, serif"
+        font-size="50"
+        font-weight="600"
+        fill="url(#goldGradient)"
+        text-anchor="middle">A</text>
+</svg>
