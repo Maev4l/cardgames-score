@@ -46,13 +46,16 @@ const cardPoints = {
   'Ace': { normal: 11, trump: 11 },
 };
 
+// Get points for a single card
+const getCardPoints = (card, trump) => {
+  const isTrump = card.suit.toLowerCase() === trump?.toLowerCase();
+  const points = cardPoints[card.rank];
+  return isTrump ? points.trump : points.normal;
+};
+
 // Calculate points for a set of cards given trump suit
 const calculatePoints = (cards, trump) => {
-  return cards.reduce((total, card) => {
-    const isTrump = card.suit.toLowerCase() === trump?.toLowerCase();
-    const points = cardPoints[card.rank];
-    return total + (isTrump ? points.trump : points.normal);
-  }, 0);
+  return cards.reduce((total, card) => total + getCardPoints(card, trump), 0);
 };
 
 const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, onCancel }) => {
@@ -136,21 +139,27 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
                   )}
                   {/* Cards in this image */}
                   <div className="flex flex-wrap gap-2">
-                    {imageCards.map((card, cardIndex) => (
-                      <button
-                        key={cardIndex}
-                        onClick={() => handleRemoveCard(imageIndex, cardIndex)}
-                        className="flex items-center gap-1 px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
-                      >
-                        <span className={cn('text-xl font-bold', suitColors[card.suit])}>
-                          {rankAbbrev[card.rank] || card.rank}
-                        </span>
-                        <span className={cn('text-xl', suitColors[card.suit])}>
-                          {suitSymbols[card.suit]}
-                        </span>
-                        <X className="size-4 ml-1 text-charcoal/30" />
-                      </button>
-                    ))}
+                    {imageCards.map((card, cardIndex) => {
+                      const pts = getCardPoints(card, trump);
+                      return (
+                        <button
+                          key={cardIndex}
+                          onClick={() => handleRemoveCard(imageIndex, cardIndex)}
+                          className="relative flex flex-col items-center px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <span className={cn('text-xl font-bold', suitColors[card.suit])}>
+                              {rankAbbrev[card.rank] || card.rank}
+                            </span>
+                            <span className={cn('text-xl', suitColors[card.suit])}>
+                              {suitSymbols[card.suit]}
+                            </span>
+                          </div>
+                          <span className="text-xs text-charcoal/50">{pts}pts</span>
+                          <X className="absolute top-1 right-1 size-3 text-charcoal/30" />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -165,21 +174,27 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
                   <div className="flex-1 h-px bg-charcoal/10" />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {manualCards.map((card, cardIndex) => (
-                    <button
-                      key={cardIndex}
-                      onClick={() => handleRemoveManualCard(cardIndex)}
-                      className="flex items-center gap-1 px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
-                    >
-                      <span className={cn('text-xl font-bold', suitColors[card.suit])}>
-                        {rankAbbrev[card.rank] || card.rank}
-                      </span>
-                      <span className={cn('text-xl', suitColors[card.suit])}>
-                        {suitSymbols[card.suit]}
-                      </span>
-                      <X className="size-4 ml-1 text-charcoal/30" />
-                    </button>
-                  ))}
+                  {manualCards.map((card, cardIndex) => {
+                    const pts = getCardPoints(card, trump);
+                    return (
+                      <button
+                        key={cardIndex}
+                        onClick={() => handleRemoveManualCard(cardIndex)}
+                        className="relative flex flex-col items-center px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
+                      >
+                        <div className="flex items-center gap-0.5">
+                          <span className={cn('text-xl font-bold', suitColors[card.suit])}>
+                            {rankAbbrev[card.rank] || card.rank}
+                          </span>
+                          <span className={cn('text-xl', suitColors[card.suit])}>
+                            {suitSymbols[card.suit]}
+                          </span>
+                        </div>
+                        <span className="text-xs text-charcoal/50">{pts}pts</span>
+                        <X className="absolute top-1 right-1 size-3 text-charcoal/30" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
