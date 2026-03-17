@@ -1,9 +1,10 @@
 package handlers
 
-// Card represents a playing card
+// Card represents a playing card with detection confidence
 type Card struct {
-	Rank string `json:"rank"`
-	Suit string `json:"suit"`
+	Rank       string `json:"rank"`
+	Suit       string `json:"suit"`
+	Confidence int    `json:"confidence"` // 1-100
 }
 
 // ImageData represents a single image with its metadata
@@ -22,6 +23,8 @@ type DetectRequest struct {
 	MediaType string `json:"mediaType"`
 	// Multiple images
 	Images []ImageData `json:"images"`
+	// Number of detection passes (default: 1, max: number of available prompts)
+	Passes int `json:"passes,omitempty"`
 }
 
 // DetectResponse is the response payload

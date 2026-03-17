@@ -10,8 +10,9 @@ module "api" {
   timeout      = 60
 
   environment_variables = {
-    GAMES_TABLE = aws_dynamodb_table.games.name
-    REGION      = var.region
+    GAMES_TABLE    = aws_dynamodb_table.games.name
+    REGION         = var.region
+    BEDROCK_MODEL  = var.bedrock_model
   }
 
   additional_policy_arns = [aws_iam_policy.api.arn]

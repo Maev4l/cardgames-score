@@ -3,11 +3,20 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"cardgames-score.isnan.eu/functions/api/services"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+// detectionResult holds detection result for a single image + prompt combination
+type detectionResult struct {
+	imageIndex  int
+	promptIndex int
+	cards       []services.Card
+	err         error
+}
 
 // RequestDetection handles POST /detections
 // Accepts one or more base64-encoded images and returns deduplicated detected cards
@@ -53,23 +62,72 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 		}
 	}
 
-	// Detect cards from all images, keeping track per image
+	// Determine number of passes (default 1, cap at max prompts)
+	numPasses := request.Passes
+	maxPrompts := h.bedrock.NumPrompts()
+	if numPasses <= 0 {
+		numPasses = 1
+	} else if numPasses > maxPrompts {
+		numPasses = maxPrompts
+	}
+
+	// Run all detections in parallel (images x passes)
+	resultChan := make(chan detectionResult, len(images)*numPasses)
+	var wg sync.WaitGroup
+
+	for imgIdx, img := range images {
+		for passIdx := 0; passIdx < numPasses; passIdx++ {
+			wg.Add(1)
+			go func(imgIndex int, imgData ImageData, promptIndex int) {
+				defer wg.Done()
+
+				cards, err := h.bedrock.DetectCardsWithPrompt(
+					c.Request.Context(),
+					imgData.Image,
+					imgData.MediaType,
+					promptIndex,
+				)
+				if err != nil {
+					log.Error().Msgf("Card detection failed for image %d, pass %d: %s", imgIndex, promptIndex, err.Error())
+					resultChan <- detectionResult{imageIndex: imgIndex, promptIndex: promptIndex, cards: nil, err: err}
+					return
+				}
+
+				resultChan <- detectionResult{imageIndex: imgIndex, promptIndex: promptIndex, cards: cards, err: nil}
+			}(imgIdx, img, passIdx)
+		}
+	}
+
+	// Wait for all goroutines and close channel
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results: cardsByImage[imageIdx] aggregates cards from all passes
+	cardsByImageMap := make(map[int][]services.Card)
+
+	for result := range resultChan {
+		if result.err == nil && result.cards != nil {
+			cardsByImageMap[result.imageIndex] = append(cardsByImageMap[result.imageIndex], result.cards...)
+		}
+	}
+
+	// Build ordered cardsByImage and allCards
+	cardsByImage := make([][]Card, len(images))
 	var allCards []services.Card
-	var cardsByImage [][]Card
-	for i, img := range images {
-		cards, err := h.bedrock.DetectCards(c.Request.Context(), img.Image, img.MediaType)
-		if err != nil {
-			log.Error().Msgf("Card detection failed for image %d: %s", i, err.Error())
-			cardsByImage = append(cardsByImage, []Card{})
-			continue
+
+	for imgIdx := 0; imgIdx < len(images); imgIdx++ {
+		// Deduplicate cards for this image (across all passes)
+		imageCards := deduplicateServiceCards(cardsByImageMap[imgIdx])
+
+		// Convert to handler Card type
+		handlerCards := make([]Card, len(imageCards))
+		for j, card := range imageCards {
+			handlerCards[j] = Card{Rank: card.Rank, Suit: card.Suit, Confidence: card.Confidence}
 		}
-		// Convert to handler Card type for this image
-		imageCards := make([]Card, len(cards))
-		for j, card := range cards {
-			imageCards[j] = Card{Rank: card.Rank, Suit: card.Suit}
-		}
-		cardsByImage = append(cardsByImage, imageCards)
-		allCards = append(allCards, cards...)
+		cardsByImage[imgIdx] = handlerCards
+		allCards = append(allCards, imageCards...)
 	}
 
 	// Deduplicate cards across all images for flat list
@@ -81,20 +139,39 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 	})
 }
 
-// deduplicateCards removes duplicate cards based on rank+suit
-func deduplicateCards(cards []services.Card) []Card {
-	seen := make(map[string]bool)
-	result := []Card{}
+// deduplicateServiceCards removes duplicate services.Card, keeping highest confidence
+func deduplicateServiceCards(cards []services.Card) []services.Card {
+	best := make(map[string]services.Card)
 
 	for _, card := range cards {
 		key := strings.ToLower(card.Rank + "-" + card.Suit)
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, Card{
-				Rank: card.Rank,
-				Suit: card.Suit,
-			})
+		if existing, found := best[key]; !found || card.Confidence > existing.Confidence {
+			best[key] = card
 		}
+	}
+
+	result := make([]services.Card, 0, len(best))
+	for _, card := range best {
+		result = append(result, card)
+	}
+	return result
+}
+
+// deduplicateCards removes duplicate cards, keeping highest confidence
+func deduplicateCards(cards []services.Card) []Card {
+	best := make(map[string]Card)
+
+	for _, card := range cards {
+		key := strings.ToLower(card.Rank + "-" + card.Suit)
+		handlerCard := Card{Rank: card.Rank, Suit: card.Suit, Confidence: card.Confidence}
+		if existing, found := best[key]; !found || card.Confidence > existing.Confidence {
+			best[key] = handlerCard
+		}
+	}
+
+	result := make([]Card, 0, len(best))
+	for _, card := range best {
+		result = append(result, card)
 	}
 	return result
 }

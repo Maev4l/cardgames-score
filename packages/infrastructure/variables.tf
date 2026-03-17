@@ -12,3 +12,9 @@ variable "authentication_domain" {
   type        = string
   default     = "platform-idp-auth.isnan.eu"
 }
+
+variable "bedrock_model" {
+  description = "Bedrock model ID for card detection"
+  type        = string
+  default     = "eu.anthropic.claude-sonnet-4-6"
+}

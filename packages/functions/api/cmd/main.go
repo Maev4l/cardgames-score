@@ -32,9 +32,10 @@ func init() {
 	if gamesTable == "" {
 		gamesTable = "atout-games"
 	}
+	bedrockModel := os.Getenv("BEDROCK_MODEL")
 
 	// Initialize services
-	bedrock, err := services.NewBedrockService(region)
+	bedrock, err := services.NewBedrockService(region, bedrockModel)
 	if err != nil {
 		log.Fatal().Msgf("Failed to initialize Bedrock service: %s", err.Error())
 	}

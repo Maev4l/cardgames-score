@@ -48,8 +48,9 @@ const cardPoints = {
 
 // Get points for a single card
 const getCardPoints = (card, trump) => {
-  const isTrump = card.suit.toLowerCase() === trump?.toLowerCase();
+  const isTrump = card.suit?.toLowerCase() === trump?.toLowerCase();
   const points = cardPoints[card.rank];
+  if (!points) return 0; // Unknown rank = 0 points (safety fallback)
   return isTrump ? points.trump : points.normal;
 };
 
@@ -141,11 +142,16 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
                   <div className="flex flex-wrap gap-2">
                     {imageCards.map((card, cardIndex) => {
                       const pts = getCardPoints(card, trump);
+                      const conf = card.confidence || 100;
+                      const isLowConf = conf < 70;
                       return (
                         <button
                           key={cardIndex}
                           onClick={() => handleRemoveCard(imageIndex, cardIndex)}
-                          className="relative flex flex-col items-center px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
+                          className={cn(
+                            "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",
+                            isLowConf ? "bg-gold/20 border border-gold/40" : "bg-charcoal/5"
+                          )}
                         >
                           <div className="flex items-center gap-0.5">
                             <span className={cn('text-xl font-bold', suitColors[card.suit])}>
@@ -156,6 +162,7 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
                             </span>
                           </div>
                           <span className="text-xs text-charcoal/50">{pts}pts</span>
+                          <span className={cn("text-[10px]", isLowConf ? "text-gold" : "text-charcoal/40")}>{conf}%</span>
                           <X className="absolute top-1 right-1 size-3 text-charcoal/30" />
                         </button>
                       );

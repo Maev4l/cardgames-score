@@ -157,18 +157,25 @@ components:
 
     Card:
       type: object
+      description: "Detected playing card. Rank and suit are normalized to exact enum values."
       properties:
         rank:
           type: string
-          description: "Card rank: 7, 8, 9, 10, Jack, Queen, King, or Ace"
+          description: "Card rank (normalized)"
           enum: ["7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]
         suit:
           type: string
-          description: "Card suit"
+          description: "Card suit (normalized, capitalized)"
           enum: ["Hearts", "Diamonds", "Clubs", "Spades"]
+        confidence:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: "Detection confidence score (1-100)"
       required:
         - rank
         - suit
+        - confidence
 
     ImageData:
       type: object
@@ -201,6 +208,12 @@ components:
           description: "Array of images to process (preferred)"
           items:
             $ref: "#/components/schemas/ImageData"
+        passes:
+          type: integer
+          minimum: 1
+          maximum: 2
+          default: 1
+          description: "Number of detection passes (1=fast, 2=thorough). Each pass uses a different prompt strategy. Max is capped at available prompts."
 
     DetectResponse:
       type: object
@@ -209,7 +222,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Card"
-          description: "List of detected playing cards (deduplicated)"
+          description: "List of detected playing cards (deduplicated across all images and passes)"
+        cardsByImage:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/Card"
+          description: "Cards grouped by source image (deduplicated within each image across passes)"
 
 paths:
   /detections:
@@ -254,10 +274,23 @@ paths:
                 cards:
                   - rank: "Ace"
                     suit: "Spades"
+                    confidence: 95
                   - rank: "10"
                     suit: "Hearts"
+                    confidence: 88
                   - rank: "Queen"
                     suit: "Diamonds"
+                    confidence: 72
+                cardsByImage:
+                  - - rank: "Ace"
+                      suit: "Spades"
+                      confidence: 95
+                    - rank: "10"
+                      suit: "Hearts"
+                      confidence: 88
+                  - - rank: "Queen"
+                      suit: "Diamonds"
+                      confidence: 72
         "400":
           description: Invalid request
           content:
