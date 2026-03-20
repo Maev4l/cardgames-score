@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
@@ -9,11 +10,25 @@ import BeloteGamePage from '@/pages/belote/GamePage';
 import TarotSetupPage from '@/pages/tarot/SetupPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import PWAUpdatePrompt from '@/components/PWAUpdatePrompt';
+import SplashScreen from '@/components/SplashScreen';
 
-// Preserve query params when redirecting to login
-const RedirectToLogin = () => {
+// Initial route handler - shows splash then redirects based on auth
+const InitialRoute = () => {
+  const [showSplash, setShowSplash] = useState(true);
+  const [isAuth, setIsAuth] = useState(false);
   const location = useLocation();
-  return <Navigate to={`/login${location.search}`} replace />;
+
+  const handleSplashComplete = useCallback((authenticated) => {
+    setIsAuth(authenticated);
+    setShowSplash(false);
+  }, []);
+
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
+
+  // After splash, redirect to home if authenticated, login otherwise
+  return <Navigate to={isAuth ? '/home' : `/login${location.search}`} replace />;
 };
 
 const App = () => {
@@ -48,7 +63,7 @@ const App = () => {
             <TarotSetupPage />
           </ProtectedRoute>
         } />
-        <Route path="/" element={<RedirectToLogin />} />
+        <Route path="/" element={<InitialRoute />} />
       </Routes>
       <PWAUpdatePrompt />
     </BrowserRouter>
