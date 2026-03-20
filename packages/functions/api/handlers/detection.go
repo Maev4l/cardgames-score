@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"cardgames-score.isnan.eu/functions/api/pipeline"
 	"cardgames-score.isnan.eu/functions/api/services"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -72,11 +73,27 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 		numPasses = maxPrompts
 	}
 
-	// Run all detections in parallel (images x passes)
-	resultChan := make(chan detectionResult, len(images)*numPasses)
+	// Step 1: Enhance all images using the card detection pipeline
+	// Pipeline: Contrast +20% → Brightness +5% → Sharpen
+	// Done sequentially before parallel detection to avoid memory spikes
+	imgPipeline := pipeline.CardDetection()
+	enhancedImages := make([]ImageData, len(images))
+	for i, img := range images {
+		enhanced, err := imgPipeline.Process(img.Image, img.MediaType)
+		if err != nil {
+			log.Warn().Msgf("Image enhancement failed for image %d, using original: %s", i, err.Error())
+			enhancedImages[i] = img // Fallback to original
+		} else {
+			enhancedImages[i] = ImageData{Image: enhanced, MediaType: img.MediaType}
+			log.Debug().Msgf("Image %d enhanced successfully", i)
+		}
+	}
+
+	// Step 2: Run all detections in parallel (enhanced images x passes)
+	resultChan := make(chan detectionResult, len(enhancedImages)*numPasses)
 	var wg sync.WaitGroup
 
-	for imgIdx, img := range images {
+	for imgIdx, img := range enhancedImages {
 		for passIdx := 0; passIdx < numPasses; passIdx++ {
 			wg.Add(1)
 			go func(imgIndex int, imgData ImageData, promptIndex int) {

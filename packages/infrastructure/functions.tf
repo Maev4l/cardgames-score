@@ -8,6 +8,7 @@ module "api" {
   }
   architecture = "arm64"
   timeout      = 60
+  memory_size  = 512
 
   environment_variables = {
     GAMES_TABLE    = aws_dynamodb_table.games.name
