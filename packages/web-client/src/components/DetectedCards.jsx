@@ -146,7 +146,7 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
                       const isLowConf = conf < 70;
                       return (
                         <button
-                          key={cardIndex}
+                          key={card.order || cardIndex}
                           onClick={() => handleRemoveCard(imageIndex, cardIndex)}
                           className={cn(
                             "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",

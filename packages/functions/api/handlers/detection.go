@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -114,23 +115,33 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 	}
 
 	// Build ordered cardsByImage and allCards
+	// Track global order across all images
 	cardsByImage := make([][]Card, len(images))
 	var allCards []services.Card
+	globalOrder := 1
 
 	for imgIdx := 0; imgIdx < len(images); imgIdx++ {
 		// Deduplicate cards for this image (across all passes)
 		imageCards := deduplicateServiceCards(cardsByImageMap[imgIdx])
 
-		// Convert to handler Card type
+		// Convert to handler Card type with global order
 		handlerCards := make([]Card, len(imageCards))
 		for j, card := range imageCards {
-			handlerCards[j] = Card{Rank: card.Rank, Suit: card.Suit, Confidence: card.Confidence}
+			handlerCards[j] = Card{
+				Rank:       card.Rank,
+				Suit:       card.Suit,
+				Confidence: card.Confidence,
+				Order:      globalOrder,
+			}
+			// Update service card order for global deduplication
+			imageCards[j].Order = globalOrder
+			globalOrder++
 		}
 		cardsByImage[imgIdx] = handlerCards
 		allCards = append(allCards, imageCards...)
 	}
 
-	// Deduplicate cards across all images for flat list
+	// Deduplicate cards across all images for flat list (preserves order)
 	responseCards := deduplicateCards(allCards)
 
 	c.JSON(http.StatusOK, DetectResponse{
@@ -139,13 +150,17 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 	})
 }
 
-// deduplicateServiceCards removes duplicate services.Card, keeping highest confidence
+// deduplicateServiceCards removes duplicate services.Card, keeping highest confidence but earliest order
 func deduplicateServiceCards(cards []services.Card) []services.Card {
 	best := make(map[string]services.Card)
 
 	for _, card := range cards {
 		key := strings.ToLower(card.Rank + "-" + card.Suit)
-		if existing, found := best[key]; !found || card.Confidence > existing.Confidence {
+		if existing, found := best[key]; !found {
+			best[key] = card
+		} else if card.Confidence > existing.Confidence {
+			// Keep higher confidence but preserve earlier order
+			card.Order = existing.Order
 			best[key] = card
 		}
 	}
@@ -154,17 +169,27 @@ func deduplicateServiceCards(cards []services.Card) []services.Card {
 	for _, card := range best {
 		result = append(result, card)
 	}
+
+	// Sort by detection order
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Order < result[j].Order
+	})
+
 	return result
 }
 
-// deduplicateCards removes duplicate cards, keeping highest confidence
+// deduplicateCards removes duplicate cards across images, keeping highest confidence but earliest order
 func deduplicateCards(cards []services.Card) []Card {
 	best := make(map[string]Card)
 
 	for _, card := range cards {
 		key := strings.ToLower(card.Rank + "-" + card.Suit)
-		handlerCard := Card{Rank: card.Rank, Suit: card.Suit, Confidence: card.Confidence}
-		if existing, found := best[key]; !found || card.Confidence > existing.Confidence {
+		handlerCard := Card{Rank: card.Rank, Suit: card.Suit, Confidence: card.Confidence, Order: card.Order}
+		if existing, found := best[key]; !found {
+			best[key] = handlerCard
+		} else if card.Confidence > existing.Confidence {
+			// Keep higher confidence but preserve earlier order
+			handlerCard.Order = existing.Order
 			best[key] = handlerCard
 		}
 	}
@@ -173,5 +198,11 @@ func deduplicateCards(cards []services.Card) []Card {
 	for _, card := range best {
 		result = append(result, card)
 	}
+
+	// Sort by detection order
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Order < result[j].Order
+	})
+
 	return result
 }

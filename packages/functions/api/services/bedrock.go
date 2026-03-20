@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -134,6 +135,7 @@ type Card struct {
 	Rank       string `json:"rank"`
 	Suit       string `json:"suit"`
 	Confidence int    `json:"confidence"` // 1-100, how confident the model is
+	Order      int    `json:"order"`      // Detection order (1-based, order AI returned it)
 }
 
 // normalizeRank converts AI-returned rank to standard API value
@@ -274,9 +276,9 @@ func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64,
 		return nil, fmt.Errorf("parsing cards JSON: %w (raw: %s)", err, rawText)
 	}
 
-	// Normalize and filter valid cards
+	// Normalize and filter valid cards, assign detection order (1-based)
 	var cards []Card
-	for _, c := range rawCards {
+	for i, c := range rawCards {
 		rank := normalizeRank(c.Rank)
 		suit := normalizeSuit(c.Suit)
 		if rank != "" && suit != "" {
@@ -284,11 +286,12 @@ func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64,
 				Rank:       rank,
 				Suit:       suit,
 				Confidence: c.Confidence,
+				Order:      i + 1, // 1-based detection order
 			})
 		}
 	}
 
-	// Deduplicate cards within this prompt's results
+	// Deduplicate cards within this prompt's results (preserves order of first occurrence)
 	return deduplicateCards(cards), nil
 }
 
@@ -302,13 +305,17 @@ func extractJSONArray(text string) string {
 	return text
 }
 
-// deduplicateCards removes duplicate cards, keeping the one with highest confidence
+// deduplicateCards removes duplicate cards, keeping highest confidence but earliest order
 func deduplicateCards(cards []Card) []Card {
 	best := make(map[string]Card)
 
 	for _, card := range cards {
 		key := strings.ToLower(card.Rank + "-" + card.Suit)
-		if existing, found := best[key]; !found || card.Confidence > existing.Confidence {
+		if existing, found := best[key]; !found {
+			best[key] = card
+		} else if card.Confidence > existing.Confidence {
+			// Keep higher confidence but preserve earlier order
+			card.Order = existing.Order
 			best[key] = card
 		}
 	}
@@ -317,5 +324,11 @@ func deduplicateCards(cards []Card) []Card {
 	for _, card := range best {
 		result = append(result, card)
 	}
+
+	// Sort by detection order
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Order < result[j].Order
+	})
+
 	return result
 }

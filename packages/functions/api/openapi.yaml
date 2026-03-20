@@ -157,7 +157,7 @@ components:
 
     Card:
       type: object
-      description: "Detected playing card. Rank and suit are normalized to exact enum values."
+      description: "Detected playing card. Rank and suit are normalized to exact enum values. Cards are returned in detection order."
       properties:
         rank:
           type: string
@@ -172,10 +172,15 @@ components:
           minimum: 1
           maximum: 100
           description: "Detection confidence score (1-100)"
+        order:
+          type: integer
+          minimum: 1
+          description: "Detection order (1-based, order in which AI detected the card)"
       required:
         - rank
         - suit
         - confidence
+        - order
 
     ImageData:
       type: object

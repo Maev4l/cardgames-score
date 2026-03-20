@@ -5,6 +5,7 @@ type Card struct {
 	Rank       string `json:"rank"`
 	Suit       string `json:"suit"`
 	Confidence int    `json:"confidence"` // 1-100
+	Order      int    `json:"order"`      // Detection order (1-based)
 }
 
 // ImageData represents a single image with its metadata
