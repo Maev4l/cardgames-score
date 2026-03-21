@@ -5,7 +5,8 @@ type Card struct {
 	Rank       string `json:"rank"`
 	Suit       string `json:"suit"`
 	Confidence int    `json:"confidence"` // 1-100
-	Order      int    `json:"order"`      // Detection order (1-based)
+	Order      int    `json:"order"`      // Detection order within image (1-based)
+	Image      int    `json:"image"`      // Source image number (1-based)
 }
 
 // ImageData represents a single image with its metadata
@@ -30,6 +31,5 @@ type DetectRequest struct {
 
 // DetectResponse is the response payload
 type DetectResponse struct {
-	Cards        []Card   `json:"cards"`
-	CardsByImage [][]Card `json:"cardsByImage"`
+	Cards []Card `json:"cards"`
 }

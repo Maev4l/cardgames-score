@@ -10,12 +10,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/rs/zerolog/log"
 )
 
 // Detection prompts - each focuses on different aspects
 // Output format is strictly defined: rank and suit must use exact values below
 var detectionPrompts = []string{
-	// Prompt 0: General systematic scan
+	// Prompt 0: General systematic scan with explicit suit shape guidance
 	`You are analyzing a photo of French Belote playing cards. Identify ALL visible cards.
 
 STEP 1 - SCAN SYSTEMATICALLY:
@@ -24,16 +25,25 @@ STEP 1 - SCAN SYSTEMATICALLY:
 - Pay special attention to edges where cards may be partially visible
 - Look for overlapping cards
 
-STEP 2 - IDENTIFY EACH CARD:
-Cards may be printed in FRENCH or ENGLISH:
-- French: R (Roi), D (Dame), V (Valet), As
-- English: K, Q, J, A
-- Numbers: 7, 8, 9, 10
+STEP 2 - IDENTIFY SUITS BY SHAPE (CRITICAL - color alone is not enough):
+RED SUITS - distinguish by SHAPE:
+  ♥ Hearts = curved top with pointed bottom (valentine heart shape)
+  ♦ Diamonds = four equal pointed corners (rhombus/tilted square shape)
 
-Suits: Hearts (red ♥), Diamonds (red ♦), Clubs (black ♣), Spades (black ♠)
+BLACK SUITS - distinguish by SHAPE:
+  ♠ Spades = pointed top + stem at bottom (upside-down heart with stem)
+  ♣ Clubs = three rounded lobes at top + stem at bottom (shamrock/clover shape)
+
+STEP 3 - IDENTIFY RANKS:
+Cards may be printed in FRENCH or ENGLISH:
+- French: R (Roi), D (Dame), V (Valet), As or 1
+- English: K, Q, J, A or 1
+- Numbers: 7, 8, 9, 10
+- Note: Ace can be shown as "A", "As", or "1" depending on the deck
+
 Belote uses 32 cards: 7, 8, 9, 10, J/V, Q/D, K/R, A in each suit
 
-STEP 3 - RATE CONFIDENCE (1-100):
+STEP 4 - RATE CONFIDENCE (1-100):
 - 90-100: Card fully visible, rank and suit clearly readable
 - 70-89: Card mostly visible, high certainty
 - 50-69: Card partially obscured but identifiable
@@ -49,7 +59,7 @@ Return ONLY a JSON array:
 
 Include ALL cards with confidence >= 50. No other text, just the JSON array.`,
 
-	// Prompt 1: Focus on hard-to-see/partial cards
+	// Prompt 1: Focus on hard-to-see/partial cards with suit shape guidance
 	`You are a specialist at finding PARTIALLY VISIBLE playing cards that are easy to miss.
 
 FOCUS AREAS (where cards often hide):
@@ -58,13 +68,23 @@ FOCUS AREAS (where cards often hide):
 3. FANNED/SPREAD CARDS - where only the corner index shows
 4. TILTED/ROTATED CARDS - at unusual angles
 
+CRITICAL - SUIT IDENTIFICATION BY SHAPE:
+Do NOT rely on color alone. Same-color suits have DIFFERENT SHAPES:
+
+RED SUITS:
+  ♥ Hearts = curved/rounded top, pointed bottom (classic heart shape)
+  ♦ Diamonds = 4 corners, all pointed, like a rotated square
+
+BLACK SUITS:
+  ♠ Spades = pointed top, curves out at sides, stem at bottom
+  ♣ Clubs = 3 rounded bumps/lobes at top, stem at bottom
+
 CARD IDENTIFICATION:
 - Look for corner indices (small rank + suit symbol in corners)
-- French cards: R=King, D=Queen, V=Jack, As=Ace
-- English cards: K=King, Q=Queen, J=Jack, A=Ace
+- French cards: R=King, D=Queen, V=Jack, As or 1=Ace
+- English cards: K=King, Q=Queen, J=Jack, A or 1=Ace
 - Numbers: 7, 8, 9, 10
 
-Suits: ♥ Hearts (red), ♦ Diamonds (red), ♣ Clubs (black), ♠ Spades (black)
 Belote deck: 7, 8, 9, 10, J/V, Q/D, K/R, A in each suit
 
 OUTPUT FORMAT (STRICT):
@@ -156,7 +176,7 @@ func normalizeRank(rank string) string {
 		return RankQueen
 	case "k", "king", "r", "roi":
 		return RankKing
-	case "a", "ace", "as":
+	case "a", "ace", "as", "1":
 		return RankAce
 	default:
 		return "" // Invalid rank
@@ -271,6 +291,11 @@ func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64,
 	rawText := response.Content[0].Text
 	jsonStr := extractJSONArray(rawText)
 
+	log.Debug().
+		Int("prompt", promptIndex).
+		Str("raw_response", rawText).
+		Msg("Detection raw response")
+
 	var rawCards []Card
 	if err := json.Unmarshal([]byte(jsonStr), &rawCards); err != nil {
 		return nil, fmt.Errorf("parsing cards JSON: %w (raw: %s)", err, rawText)
@@ -292,7 +317,16 @@ func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64,
 	}
 
 	// Deduplicate cards within this prompt's results (preserves order of first occurrence)
-	return deduplicateCards(cards), nil
+	result := deduplicateCards(cards)
+
+	log.Info().
+		Int("prompt", promptIndex).
+		Int("raw_count", len(rawCards)).
+		Int("valid_count", len(result)).
+		Interface("cards", result).
+		Msg("Detection result")
+
+	return result, nil
 }
 
 // extractJSONArray extracts JSON array from text that may contain other content

@@ -114,8 +114,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
     try {
       const images = capturedImages.map(({ image, mediaType }) => ({ image, mediaType }));
       const result = await detectCards(images);
-      // Pass both flat cards and grouped cardsByImage
-      onCapture(result.cards || [], result.cardsByImage || []);
+      onCapture(result.cards || []);
     } catch (err) {
       setError(err.message || 'Failed to detect cards');
       setLoading(false);
@@ -266,7 +265,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
 
       {/* Action Buttons - only show when camera is active */}
       {showCamera && !loading && !cameraError && (
-        <div className="p-6 bg-charcoal/95 flex justify-center gap-4">
+        <div className="p-6 bg-charcoal/95 flex justify-center gap-12">
           <Button
             onClick={handleCapture}
             disabled={!cameraReady}

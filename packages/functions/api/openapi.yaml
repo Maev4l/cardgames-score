@@ -157,7 +157,7 @@ components:
 
     Card:
       type: object
-      description: "Detected playing card. Rank and suit are normalized to exact enum values. Cards are returned in detection order."
+      description: "Detected playing card. Rank and suit are normalized. Cards sorted by image, then detection order."
       properties:
         rank:
           type: string
@@ -175,12 +175,17 @@ components:
         order:
           type: integer
           minimum: 1
-          description: "Detection order (1-based, order in which AI detected the card)"
+          description: "Detection order within image (1-based)"
+        image:
+          type: integer
+          minimum: 1
+          description: "Source image number (1-based)"
       required:
         - rank
         - suit
         - confidence
         - order
+        - image
 
     ImageData:
       type: object
@@ -227,14 +232,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Card"
-          description: "List of detected playing cards (deduplicated across all images and passes)"
-        cardsByImage:
-          type: array
-          items:
-            type: array
-            items:
-              $ref: "#/components/schemas/Card"
-          description: "Cards grouped by source image (deduplicated within each image across passes)"
+          description: "Flat list of detected cards, sorted by image then detection order. Deduplicated across all images."
 
 paths:
   /detections:
@@ -280,22 +278,18 @@ paths:
                   - rank: "Ace"
                     suit: "Spades"
                     confidence: 95
+                    order: 1
+                    image: 1
                   - rank: "10"
                     suit: "Hearts"
                     confidence: 88
+                    order: 2
+                    image: 1
                   - rank: "Queen"
                     suit: "Diamonds"
                     confidence: 72
-                cardsByImage:
-                  - - rank: "Ace"
-                      suit: "Spades"
-                      confidence: 95
-                    - rank: "10"
-                      suit: "Hearts"
-                      confidence: 88
-                  - - rank: "Queen"
-                      suit: "Diamonds"
-                      confidence: 72
+                    order: 1
+                    image: 2
         "400":
           description: Invalid request
           content:

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, X, Plus, Trash2 } from 'lucide-react';
+import { Check, X, Plus, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const suitSymbols = {
@@ -59,8 +59,8 @@ const calculatePoints = (cards, trump) => {
   return cards.reduce((total, card) => total + getCardPoints(card, trump), 0);
 };
 
-const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, onCancel }) => {
-  const [groupedCards, setGroupedCards] = useState(cardsByImage);
+const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel, onRetake }) => {
+  const [detectedCards, setDetectedCards] = useState(cards);
   const [manualCards, setManualCards] = useState([]);
   const [showAddCard, setShowAddCard] = useState(false);
   const [addRank, setAddRank] = useState('Ace');
@@ -68,18 +68,15 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
 
   // All cards = detected + manual
   const allCards = useMemo(() => {
-    const detected = groupedCards.flat();
-    return [...detected, ...manualCards];
-  }, [groupedCards, manualCards]);
+    return [...detectedCards, ...manualCards];
+  }, [detectedCards, manualCards]);
 
   // Calculate points for current cards
   const points = useMemo(() => calculatePoints(allCards, trump), [allCards, trump]);
 
-  // Remove a detected card
-  const handleRemoveCard = (imageIndex, cardIndex) => {
-    setGroupedCards(prev => prev.map((group, i) =>
-      i === imageIndex ? group.filter((_, j) => j !== cardIndex) : group
-    ));
+  // Remove a detected card by index
+  const handleRemoveCard = (cardIndex) => {
+    setDetectedCards(prev => prev.filter((_, i) => i !== cardIndex));
   };
 
   // Remove a manually added card
@@ -126,51 +123,38 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
               </div>
             </div>
 
-            {/* Card List - grouped by image */}
-            <div className="space-y-3">
-              {groupedCards.map((imageCards, imageIndex) => (
-                <div key={imageIndex}>
-                  {/* Image label - only show if multiple images */}
-                  {groupedCards.length > 1 && (
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex-1 h-px bg-charcoal/10" />
-                      <span className="text-charcoal/30 text-xs">Photo {imageIndex + 1}</span>
-                      <div className="flex-1 h-px bg-charcoal/10" />
-                    </div>
-                  )}
-                  {/* Cards in this image */}
-                  <div className="flex flex-wrap gap-2">
-                    {imageCards.map((card, cardIndex) => {
-                      const pts = getCardPoints(card, trump);
-                      const conf = card.confidence || 100;
-                      const isLowConf = conf < 70;
-                      return (
-                        <button
-                          key={card.order || cardIndex}
-                          onClick={() => handleRemoveCard(imageIndex, cardIndex)}
-                          className={cn(
-                            "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",
-                            isLowConf ? "bg-gold/20 border border-gold/40" : "bg-charcoal/5"
-                          )}
-                        >
-                          <div className="flex items-center gap-0.5">
-                            <span className={cn('text-xl font-bold', suitColors[card.suit])}>
-                              {rankAbbrev[card.rank] || card.rank}
-                            </span>
-                            <span className={cn('text-xl', suitColors[card.suit])}>
-                              {suitSymbols[card.suit]}
-                            </span>
-                          </div>
-                          <span className="text-xs text-charcoal/50">{pts}pts</span>
-                          <span className={cn("text-[10px]", isLowConf ? "text-gold" : "text-charcoal/40")}>{conf}%</span>
-                          <X className="absolute top-1 right-1 size-3 text-charcoal/30" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Detected Cards - flat list */}
+            {detectedCards.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {detectedCards.map((card, cardIndex) => {
+                  const pts = getCardPoints(card, trump);
+                  const conf = card.confidence || 100;
+                  const isLowConf = conf < 70;
+                  return (
+                    <button
+                      key={`${card.image}-${card.order}-${cardIndex}`}
+                      onClick={() => handleRemoveCard(cardIndex)}
+                      className={cn(
+                        "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",
+                        isLowConf ? "bg-gold/20 border border-gold/40" : "bg-charcoal/5"
+                      )}
+                    >
+                      <div className="flex items-center gap-0.5">
+                        <span className={cn('text-xl font-bold', suitColors[card.suit])}>
+                          {rankAbbrev[card.rank] || card.rank}
+                        </span>
+                        <span className={cn('text-xl', suitColors[card.suit])}>
+                          {suitSymbols[card.suit]}
+                        </span>
+                      </div>
+                      <span className="text-xs text-charcoal/50">{pts}pts</span>
+                      <span className={cn("text-[10px]", isLowConf ? "text-gold" : "text-charcoal/40")}>{conf}%</span>
+                      <X className="absolute top-1 right-1 size-3 text-charcoal/30" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Manually added cards */}
             {manualCards.length > 0 && (
@@ -262,14 +246,29 @@ const DetectedCards = ({ cardsByImage = [], trump, team, teamName, onConfirm, on
               </Button>
             )}
 
-            {/* Confirm Button */}
-            <Button
-              onClick={() => onConfirm({ team, points, cards: allCards })}
-              className="w-full h-12 bg-gold text-charcoal hover:bg-gold/90"
-            >
-              <Check className="size-5 mr-2" />
-              Confirm {points} pts for {teamName || `Team ${team}`}
-            </Button>
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              {/* Retake - allows capturing new pictures */}
+              {onRetake && (
+                <Button
+                  variant="outline"
+                  onClick={onRetake}
+                  className="flex-1 h-12 border-charcoal/20 text-charcoal"
+                >
+                  <RotateCcw className="size-5 mr-2" />
+                  Retake
+                </Button>
+              )}
+
+              {/* Confirm */}
+              <Button
+                onClick={() => onConfirm({ team, points, cards: allCards })}
+                className="flex-1 h-12 bg-gold text-charcoal hover:bg-gold/90"
+              >
+                <Check className="size-5 mr-2" />
+                Confirm {points} pts
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -43,8 +43,8 @@ const GamePage = () => {
   const [showWinnerPopup, setShowWinnerPopup] = useState(false);
   const prevStatusRef = useRef(null);
 
-  // Cards grouped by image for display
-  const [cardsByImage, setCardsByImage] = useState([]);
+  // Detected cards (flat list)
+  const [detectedCards, setDetectedCards] = useState([]);
 
   // Load game data
   const loadGame = useCallback(async () => {
@@ -72,8 +72,8 @@ const GamePage = () => {
   }, [game?.status]);
 
   // Handle card detection result - show review UI
-  const handleCardsDetected = (_, groupedCards) => {
-    setCardsByImage(groupedCards || []);
+  const handleCardsDetected = (cards) => {
+    setDetectedCards(cards || []);
     setShowCamera(false);
     setShowDetection(true);
   };
@@ -89,7 +89,7 @@ const GamePage = () => {
       setPointsA(162 - points);
     }
     setShowDetection(false);
-    setCardsByImage([]);
+    setDetectedCards([]);
   };
 
   // Submit round
@@ -430,15 +430,21 @@ const GamePage = () => {
       {/* Detection Review Modal */}
       {showDetection && (
         <DetectedCards
-          cardsByImage={cardsByImage}
+          cards={detectedCards}
           trump={trump}
           team={scanTeam}
           teamName={scanTeam === 'A' ? game.teams?.a.name : game.teams?.b.name}
           onConfirm={handleConfirmDetection}
           onCancel={() => {
             setShowDetection(false);
-            setCardsByImage([]);
+            setDetectedCards([]);
             setScanTeam(null);
+          }}
+          onRetake={() => {
+            // Close detection, reopen camera (keep scanTeam)
+            setShowDetection(false);
+            setDetectedCards([]);
+            setShowCamera(true);
           }}
         />
       )}
