@@ -1,21 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, Check, X } from 'lucide-react';
 import { useState } from 'react';
-
-const suitSymbols = {
-  hearts: '♥',
-  diamonds: '♦',
-  clubs: '♣',
-  spades: '♠',
-};
-
-const suitColors = {
-  hearts: 'text-ruby',
-  diamonds: 'text-ruby',
-  clubs: 'text-charcoal',
-  spades: 'text-charcoal',
-};
 
 const RoundHistory = ({ rounds, teams, onDelete }) => {
   const [expanded, setExpanded] = useState(true);
@@ -44,54 +30,67 @@ const RoundHistory = ({ rounds, teams, onDelete }) => {
 
       {expanded && (
         <CardContent className="space-y-2">
-          {rounds.map((round) => (
-            <div
-              key={round.roundNum}
-              className="flex items-center justify-between p-3 bg-charcoal/5 rounded-lg"
-            >
-              {/* Round info */}
-              <div className="flex items-center gap-3">
-                <span className="text-charcoal/40 text-sm w-6">#{round.roundNum}</span>
-                <span className={`text-2xl ${suitColors[round.trump]}`}>
-                  {suitSymbols[round.trump]}
-                </span>
-                <div className="text-sm">
-                  <span className="text-charcoal/60">
-                    {round.taker === 'A' ? teams?.a.name : teams?.b.name} takes
-                  </span>
-                  {round.belote && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-gold/20 text-gold rounded text-xs">
-                      Belote
-                    </span>
-                  )}
-                  {round.capot && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-ruby/20 text-ruby rounded text-xs">
-                      Capot
-                    </span>
-                  )}
-                </div>
-              </div>
+          {rounds.map((round) => {
+            const scoreA = round.scores?.A || 0;
+            const scoreB = round.scores?.B || 0;
+            const takerWon = (round.taker === 'A' && scoreA > scoreB) ||
+                             (round.taker === 'B' && scoreB > scoreA);
+            const takerName = round.taker === 'A' ? teams?.a.name : teams?.b.name;
 
-              {/* Score & Delete */}
-              <div className="flex items-center gap-3">
-                <div className="text-right text-sm">
-                  <div className="text-charcoal font-medium">
-                    {round.scores?.A || 0} - {round.scores?.B || 0}
+            return (
+              <div
+                key={round.roundNum}
+                className="flex items-center justify-between p-3 bg-charcoal/5 rounded-lg"
+              >
+                {/* Round info: number, win/lose icon, taker */}
+                <div className="flex items-center gap-2">
+                  <span className="text-charcoal/40 text-sm w-6">#{round.roundNum}</span>
+                  {/* Win/lose indicator */}
+                  {takerWon ? (
+                    <Check className="size-5 text-green-600" />
+                  ) : (
+                    <X className="size-5 text-ruby" />
+                  )}
+                  <div className="text-sm">
+                    <span className="text-charcoal/60">{takerName}</span>
+                    {round.belote && (
+                      <span className="ml-2 px-1.5 py-0.5 bg-gold/20 text-gold rounded text-xs">
+                        Belote
+                      </span>
+                    )}
+                    {round.capot && (
+                      <span className="ml-2 px-1.5 py-0.5 bg-ruby/20 text-ruby rounded text-xs">
+                        Capot
+                      </span>
+                    )}
                   </div>
                 </div>
-                {onDelete && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => onDelete(round.roundNum)}
-                    className="text-charcoal/40 hover:text-ruby hover:bg-ruby/10"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                )}
+
+                {/* Scores with fixed widths for alignment */}
+                <div className="flex items-center gap-2">
+                  <div className="text-sm tabular-nums">
+                    <span className={scoreA > scoreB ? 'text-charcoal font-bold' : 'text-charcoal/60'}>
+                      {teams?.a.name}:&nbsp;{scoreA}
+                    </span>
+                    <span className="text-charcoal/40 mx-1">–</span>
+                    <span className={scoreB > scoreA ? 'text-charcoal font-bold' : 'text-charcoal/60'}>
+                      {teams?.b.name}:&nbsp;{scoreB}
+                    </span>
+                  </div>
+                  {onDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onDelete(round.roundNum)}
+                      className="text-charcoal/40 hover:text-ruby hover:bg-ruby/10"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       )}
     </Card>
