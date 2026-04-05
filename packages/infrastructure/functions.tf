@@ -1,26 +1,27 @@
 module "api" {
-  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.5.1"
+  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.6.0"
   function_name = "cardgames-score-api"
   zip = {
     filename = "../functions/api/dist/api.zip"
     runtime  = "provided.al2023"
     handler  = "bootstrap"
+    hash     = filebase64sha256("../functions/api/bin/bootstrap")
   }
   architecture = "arm64"
   timeout      = 60
   memory_size  = 768
 
   environment_variables = {
-    GAMES_TABLE    = aws_dynamodb_table.games.name
-    REGION         = var.region
-    BEDROCK_MODEL  = var.bedrock_model
+    GAMES_TABLE   = aws_dynamodb_table.games.name
+    REGION        = var.region
+    BEDROCK_MODEL = var.bedrock_model
   }
 
   additional_policy_arns = [aws_iam_policy.api.arn]
 }
 
 module "api_trigger" {
-  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.5.1"
+  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.6.0"
 
   function_name = module.api.function_name
   function_arn  = module.api.function_arn
