@@ -51,26 +51,24 @@ const NewGamePage = () => {
           </CardContent>
         </Card>
 
-        {/* Tarot - Coming Soon */}
-        <Card className="bg-ivory/50 border-charcoal/10 opacity-60">
+        {/* Tarot - Active */}
+        <Card
+          className="bg-ivory/95 border-gold/30 shadow-xl cursor-pointer hover:bg-ivory transition-colors"
+          onClick={() => navigate('/tarot/setup')}
+        >
           <CardHeader className="pb-2">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-charcoal/10 rounded-lg">
-                <Crown className="size-6 text-charcoal/50" />
+              <div className="p-2 bg-gold/10 rounded-lg">
+                <Crown className="size-6 text-gold" />
               </div>
-              <div className="flex items-center gap-2">
-                <div>
-                  <CardTitle className="text-charcoal/50 text-lg">Tarot</CardTitle>
-                  <CardDescription className="text-charcoal/40">3-5 players, 78 cards</CardDescription>
-                </div>
-                <span className="ml-2 px-2 py-0.5 bg-charcoal/10 rounded text-xs text-charcoal/50">
-                  Coming soon
-                </span>
+              <div>
+                <CardTitle className="text-charcoal text-lg">Tarot</CardTitle>
+                <CardDescription>3-5 players, 78 cards</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-charcoal/40 text-sm">
+            <p className="text-charcoal/70 text-sm">
               French Tarot for 3-5 players. Complex bidding and scoring system.
             </p>
           </CardContent>

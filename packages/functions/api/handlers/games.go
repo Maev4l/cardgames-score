@@ -24,8 +24,12 @@ func NewGamesHandler(db *services.DynamoDBService) *GamesHandler {
 // CreateGameRequest is the request body for creating a game
 type CreateGameRequest struct {
 	Type        string              `json:"type" binding:"required,oneof=belote tarot"`
+	// Belote-specific fields
 	Teams       *services.Teams     `json:"teams,omitempty"`
 	TargetScore int                 `json:"targetScore,omitempty"`
+	// Tarot-specific fields
+	Players     []string            `json:"players,omitempty"`     // Player names
+	PlayerCount int                 `json:"playerCount,omitempty"` // 3, 4, or 5
 }
 
 // CreateGame handles POST /api/games
@@ -46,16 +50,43 @@ func (h *GamesHandler) CreateGame(c *gin.Context) {
 	}
 
 	game := &services.Game{
-		ID:          uuid.New().String(),
-		Type:        req.Type,
-		Status:      "active",
-		Teams:       req.Teams,
-		TargetScore: req.TargetScore,
+		ID:     uuid.New().String(),
+		Type:   req.Type,
+		Status: "active",
 	}
 
-	// Default target score for Belote
-	if req.Type == "belote" && game.TargetScore == 0 {
-		game.TargetScore = 1000
+	// Initialize game-specific fields
+	if req.Type == "belote" {
+		game.Teams = req.Teams
+		game.TargetScore = req.TargetScore
+		// Default target score for Belote
+		if game.TargetScore == 0 {
+			game.TargetScore = 1000
+		}
+	} else if req.Type == "tarot" {
+		// Validate player count
+		playerCount := req.PlayerCount
+		if playerCount < 3 || playerCount > 5 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"message": "Invalid playerCount. Must be 3, 4, or 5",
+			})
+			return
+		}
+
+		// Initialize players with names (or defaults)
+		players := make([]services.TarotPlayer, playerCount)
+		for i := 0; i < playerCount; i++ {
+			name := ""
+			if i < len(req.Players) {
+				name = req.Players[i]
+			}
+			if name == "" {
+				name = "Joueur " + strconv.Itoa(i+1)
+			}
+			players[i] = services.TarotPlayer{Name: name, Score: 0}
+		}
+		game.Players = players
+		game.PlayerCount = playerCount
 	}
 
 	if err := h.db.CreateGame(c.Request.Context(), userID, game); err != nil {
@@ -106,6 +137,28 @@ func (h *GamesHandler) GetGame(c *gin.Context) {
 		gameType = "belote" // Default to belote
 	}
 
+	// Route to game-type-specific getter (different round struct types)
+	if gameType == "tarot" {
+		game, rounds, err := h.db.GetTarotGame(c.Request.Context(), userID, gameID)
+		if err != nil {
+			log.Error().Msgf("Failed to get tarot game: %s", err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Failed to get game",
+			})
+			return
+		}
+		if game == nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Game not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"game":   game,
+			"rounds": rounds,
+		})
+		return
+	}
+
+	// Belote (default)
 	game, rounds, err := h.db.GetGame(c.Request.Context(), userID, gameType, gameID)
 	if err != nil {
 		log.Error().Msgf("Failed to get game: %s", err.Error())
@@ -126,91 +179,21 @@ func (h *GamesHandler) GetGame(c *gin.Context) {
 	})
 }
 
-// AddRoundRequest is the request body for adding a round
-type AddRoundRequest struct {
-	Taker  string         `json:"taker" binding:"required,oneof=A B"`
-	Trump  string         `json:"trump" binding:"required,oneof=hearts diamonds clubs spades"`
-	Scores map[string]int `json:"scores" binding:"required"`
-	Belote bool           `json:"belote"`
-	Capot  bool           `json:"capot"`
-}
-
 // AddRound handles POST /api/games/:id/rounds
+// Routes to game-specific handler based on type query param
 func (h *GamesHandler) AddRound(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "User not authenticated"})
-		return
-	}
-
-	gameID := c.Param("id")
 	gameType := c.Query("type")
 	if gameType == "" {
 		gameType = "belote"
 	}
 
-	var req AddRoundRequest
-	if err := c.BindJSON(&req); err != nil {
-		log.Error().Msgf("Invalid request: %s", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Invalid request. Required: taker (A/B), trump, scores",
-		})
-		return
+	// Route to game-specific handler
+	switch gameType {
+	case "tarot":
+		h.AddTarotRound(c)
+	default:
+		h.AddBeloteRound(c)
 	}
-
-	// Get game to validate it exists and get current round count
-	game, rounds, err := h.db.GetGame(c.Request.Context(), userID, gameType, gameID)
-	if err != nil {
-		log.Error().Msgf("Failed to get game: %s", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "Failed to get game",
-		})
-		return
-	}
-	if game == nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Game not found"})
-		return
-	}
-
-	// Reject if game is already finished
-	if game.Status == "finished" {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Cannot add round to a finished game"})
-		return
-	}
-
-	round := &services.Round{
-		RoundNum: len(rounds) + 1,
-		Taker:    req.Taker,
-		Trump:    req.Trump,
-		Scores:   req.Scores,
-		Belote:   req.Belote,
-		Capot:    req.Capot,
-	}
-
-	if err := h.db.AddRound(c.Request.Context(), gameID, round); err != nil {
-		log.Error().Msgf("Failed to add round: %s", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "Failed to add round",
-		})
-		return
-	}
-
-	// Update game scores
-	if game.Teams != nil {
-		game.Teams.A.Score += req.Scores["A"]
-		game.Teams.B.Score += req.Scores["B"]
-
-		// Check if game is finished
-		if game.Teams.A.Score >= game.TargetScore || game.Teams.B.Score >= game.TargetScore {
-			game.Status = "finished"
-		}
-
-		if err := h.db.UpdateGame(c.Request.Context(), userID, game); err != nil {
-			log.Error().Msgf("Failed to update game scores: %s", err.Error())
-		}
-	}
-
-	c.JSON(http.StatusCreated, round)
 }
 
 // DeleteRound handles DELETE /api/games/:id/rounds/:num

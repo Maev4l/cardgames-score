@@ -38,7 +38,9 @@ const HomePage = () => {
   };
 
   const handleGameClick = (game) => {
-    navigate(`/belote/game/${game.id}`);
+    // Route to correct game type page
+    const gameType = game.type || 'belote';
+    navigate(`/${gameType}/game/${game.id}`);
   };
 
   const handleDeleteGame = async () => {
@@ -161,7 +163,7 @@ const HomePage = () => {
       {gameToDelete && (
         <ConfirmModal
           title="Delete Game"
-          message={`Delete "${gameToDelete.teams?.a.name} vs ${gameToDelete.teams?.b.name}"? This cannot be undone.`}
+          message={`Delete this ${gameToDelete.type} game? This cannot be undone.`}
           confirmLabel="Delete"
           variant="danger"
           onConfirm={handleDeleteGame}

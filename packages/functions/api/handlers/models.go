@@ -20,6 +20,9 @@ type ImageData struct {
 // DetectRequest is the incoming request payload
 // Supports both single image (legacy) and multiple images
 type DetectRequest struct {
+	// Game type: "belote" or "tarot" (default: belote)
+	// Different prompts are used for different game types
+	Type string `json:"type,omitempty"`
 	// Single image (legacy support)
 	Image     string `json:"image"`
 	MediaType string `json:"mediaType"`

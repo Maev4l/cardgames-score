@@ -1,4 +1,4 @@
-// Belote card detection review component
+// Tarot card detection review component
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ const suitSymbols = {
   Diamonds: '♦',
   Clubs: '♣',
   Spades: '♠',
+  Trump: '★',
 };
 
 const suitColors = {
@@ -17,49 +18,68 @@ const suitColors = {
   Diamonds: 'text-ruby',
   Clubs: 'text-charcoal',
   Spades: 'text-charcoal',
+  Trump: 'text-gold',
 };
 
-// Belote: 32 cards (7-A in each suit)
-const allRanks = ['7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
-const allSuits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
+// Tarot: 78 cards
+// Standard suits (14 each): 1-10, Valet, Cavalier, Dame, Roi
+// Trumps (22): 1-21 + Excuse
+const suitRanks = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Valet', 'Cavalier', 'Dame', 'Roi'];
+const trumpRanks = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', 'Excuse'];
+const allSuits = ['Hearts', 'Diamonds', 'Clubs', 'Spades', 'Trump'];
 
-// Rank abbreviations
+// Rank abbreviations (French + English names from detection)
 const rankAbbrev = {
-  'Jack': 'J', 'Queen': 'Q', 'King': 'K', 'Ace': 'A',
+  'Valet': 'V', 'Cavalier': 'C', 'Dame': 'D', 'Roi': 'R', 'Excuse': 'Ex',
+  'Jack': 'V', 'Knight': 'C', 'Queen': 'D', 'King': 'R',
 };
 
-// Belote point values
-const cardPoints = {
-  '7': { normal: 0, trump: 0 },
-  '8': { normal: 0, trump: 0 },
-  '9': { normal: 0, trump: 14 },
-  '10': { normal: 10, trump: 10 },
-  'Jack': { normal: 2, trump: 20 },
-  'Queen': { normal: 3, trump: 3 },
-  'King': { normal: 4, trump: 4 },
-  'Ace': { normal: 11, trump: 11 },
+// Tarot point values (counted in pairs, shown as halves)
+// Bouts (1, 21, Excuse): 4.5 pts
+// Roi: 4.5, Dame: 3.5, Cavalier: 2.5, Valet: 1.5
+// All others: 0.5
+const getCardPoints = (card) => {
+  const { rank, suit } = card;
+  // Bouts (oudlers)
+  if (suit === 'Trump' && (rank === '1' || rank === '21' || rank === 'Excuse')) {
+    return 4.5;
+  }
+  // Court cards
+  if (rank === 'Roi') return 4.5;
+  if (rank === 'Dame') return 3.5;
+  if (rank === 'Cavalier') return 2.5;
+  if (rank === 'Valet') return 1.5;
+  // All others (including trumps 2-20 and suit cards 1-10)
+  return 0.5;
 };
 
-const getCardPoints = (card, trump) => {
-  const isTrump = card.suit?.toLowerCase() === trump?.toLowerCase();
-  const points = cardPoints[card.rank];
-  if (!points) return 0;
-  return isTrump ? points.trump : points.normal;
+// Check if card is a bout (oudler)
+const isBout = (card) => {
+  return card.suit === 'Trump' && (card.rank === '1' || card.rank === '21' || card.rank === 'Excuse');
 };
 
-const calculatePoints = (cards, trump) => {
-  return cards.reduce((total, card) => total + getCardPoints(card, trump), 0);
+const calculatePoints = (cards) => {
+  const total = cards.reduce((sum, card) => sum + getCardPoints(card), 0);
+  return Math.round(total); // Round to integer
 };
 
-const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel, onRetake }) => {
+const countBouts = (cards) => {
+  return cards.filter(isBout).length;
+};
+
+const DetectedCardsTarot = ({ cards = [], pileName, onConfirm, onCancel, onRetake }) => {
   const [detectedCards, setDetectedCards] = useState(cards);
   const [manualCards, setManualCards] = useState([]);
   const [showAddCard, setShowAddCard] = useState(false);
-  const [addRank, setAddRank] = useState('Ace');
-  const [addSuit, setAddSuit] = useState('Hearts');
+  const [addSuit, setAddSuit] = useState('Trump');
+  const [addRank, setAddRank] = useState('1');
 
   const allCards = useMemo(() => [...detectedCards, ...manualCards], [detectedCards, manualCards]);
-  const points = useMemo(() => calculatePoints(allCards, trump), [allCards, trump]);
+  const points = useMemo(() => calculatePoints(allCards), [allCards]);
+  const bouts = useMemo(() => countBouts(allCards), [allCards]);
+
+  // Get available ranks based on selected suit
+  const availableRanks = addSuit === 'Trump' ? trumpRanks : suitRanks;
 
   const handleRemoveCard = (cardIndex) => {
     setDetectedCards(prev => prev.filter((_, i) => i !== cardIndex));
@@ -72,6 +92,12 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
   const handleAddCard = () => {
     setManualCards(prev => [...prev, { rank: addRank, suit: addSuit }]);
     setShowAddCard(false);
+  };
+
+  // Reset rank when suit changes
+  const handleSuitChange = (suit) => {
+    setAddSuit(suit);
+    setAddRank(suit === 'Trump' ? '1' : '1');
   };
 
   return (
@@ -98,25 +124,28 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
           <CardContent className="space-y-4">
             {/* Points Display */}
             <div className="p-4 bg-gold/20 rounded-lg text-center">
-              <div className="text-charcoal/60 text-sm">{teamName || `Team ${team}`}'s pile</div>
+              <div className="text-charcoal/60 text-sm">{pileName}</div>
               <div className="text-3xl font-bold text-charcoal">{points} pts</div>
-              <div className="text-charcoal/40 text-sm">Other team: {162 - points} pts</div>
+              <div className="text-charcoal/60 text-sm">
+                {bouts} bout{bouts !== 1 ? 's' : ''} • Defense: {91 - points} pts
+              </div>
             </div>
 
             {/* Detected Cards */}
             {detectedCards.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {detectedCards.map((card, cardIndex) => {
-                  const pts = getCardPoints(card, trump);
+                  const pts = getCardPoints(card);
                   const conf = card.confidence || 100;
                   const isLowConf = conf < 70;
+                  const bout = isBout(card);
                   return (
                     <button
                       key={`${card.image}-${card.order}-${cardIndex}`}
                       onClick={() => handleRemoveCard(cardIndex)}
                       className={cn(
                         "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",
-                        isLowConf ? "bg-gold/20 border border-gold/40" : "bg-charcoal/5"
+                        bout ? "bg-gold/30 border border-gold" : isLowConf ? "bg-gold/20 border border-gold/40" : "bg-charcoal/5"
                       )}
                     >
                       <div className="flex items-center gap-0.5">
@@ -146,12 +175,16 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {manualCards.map((card, cardIndex) => {
-                    const pts = getCardPoints(card, trump);
+                    const pts = getCardPoints(card);
+                    const bout = isBout(card);
                     return (
                       <button
                         key={cardIndex}
                         onClick={() => handleRemoveManualCard(cardIndex)}
-                        className="relative flex flex-col items-center px-3 py-2 bg-charcoal/5 rounded-lg active:bg-ruby/20 transition-colors"
+                        className={cn(
+                          "relative flex flex-col items-center px-3 py-2 rounded-lg active:bg-ruby/20 transition-colors",
+                          bout ? "bg-gold/30 border border-gold" : "bg-charcoal/5"
+                        )}
                       >
                         <div className="flex items-center gap-0.5">
                           <span className={cn('text-xl font-bold', suitColors[card.suit])}>
@@ -175,26 +208,26 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
               <div className="p-4 border border-charcoal/20 rounded-lg space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
+                    <label className="text-charcoal/60 text-sm block mb-1">Suit</label>
+                    <select
+                      value={addSuit}
+                      onChange={(e) => handleSuitChange(e.target.value)}
+                      className="w-full h-10 px-3 rounded border border-charcoal/20 bg-white"
+                    >
+                      {allSuits.map((suit) => (
+                        <option key={suit} value={suit}>{suitSymbols[suit]} {suit}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label className="text-charcoal/60 text-sm block mb-1">Rank</label>
                     <select
                       value={addRank}
                       onChange={(e) => setAddRank(e.target.value)}
                       className="w-full h-10 px-3 rounded border border-charcoal/20 bg-white"
                     >
-                      {allRanks.map((rank) => (
-                        <option key={rank} value={rank}>{rank}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-charcoal/60 text-sm block mb-1">Suit</label>
-                    <select
-                      value={addSuit}
-                      onChange={(e) => setAddSuit(e.target.value)}
-                      className="w-full h-10 px-3 rounded border border-charcoal/20 bg-white"
-                    >
-                      {allSuits.map((suit) => (
-                        <option key={suit} value={suit}>{suitSymbols[suit]} {suit}</option>
+                      {availableRanks.map((rank) => (
+                        <option key={rank} value={rank}>{rankAbbrev[rank] || rank}</option>
                       ))}
                     </select>
                   </div>
@@ -228,7 +261,7 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
                 </Button>
               )}
               <Button
-                onClick={() => onConfirm({ team, points, cards: allCards })}
+                onClick={() => onConfirm({ points, bouts, cards: allCards })}
                 className="flex-1 h-12 bg-gold text-charcoal hover:bg-gold/90"
               >
                 <Check className="size-5 mr-2" />
@@ -242,4 +275,4 @@ const DetectedCards = ({ cards = [], trump, team, teamName, onConfirm, onCancel,
   );
 };
 
-export default DetectedCards;
+export default DetectedCardsTarot;

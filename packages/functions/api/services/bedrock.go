@@ -13,9 +13,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Detection prompts - each focuses on different aspects
-// Output format is strictly defined: rank and suit must use exact values below
-var detectionPrompts = []string{
+// Belote detection prompts (32-card deck: 7-A in each suit)
+var belotePrompts = []string{
 	// Prompt 0: General systematic scan with explicit suit shape guidance
 	`You are analyzing a photo of French Belote playing cards. Identify ALL visible cards.
 
@@ -99,6 +98,94 @@ Return ONLY a JSON array:
 If no cards found, return: []`,
 }
 
+// Tarot detection prompts (78-card deck: standard suits + 21 trumps + Excuse)
+var tarotPrompts = []string{
+	// Prompt 0: General systematic scan for Tarot cards
+	`You are analyzing a photo of French Tarot playing cards. Identify ALL visible cards.
+
+The Tarot deck has 78 cards:
+1. STANDARD SUITS (56 cards) - 14 cards each in Hearts, Diamonds, Clubs, Spades:
+   - Numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+   - Court cards: Valet (V/Jack), Cavalier (C/Knight), Dame (D/Queen), Roi (R/King)
+
+2. TRUMPS (21 cards) - Numbered 1-21, suit is ALWAYS "Trump"
+   HOW TO RECOGNIZE TRUMPS:
+   - NO suit symbols (no hearts/diamonds/clubs/spades) - this is KEY!
+   - Large illustrated scenes with figures, animals, or symbolic imagery
+   - Number in corner or center: Arabic (1-21) OR Roman (I-XXI)
+   - Roman variants: IIII=4, VIIII=9, XIIII=14, XVIIII=19
+   - May be labeled "ATOUT" (French for trump)
+   - Notable: 1 (Le Petit/Magician), 21 (Le Monde/World with wreath)
+
+3. EXCUSE (1 card) - The Fool/Mat
+   - No number
+   - May show: jester/fool figure, OR a star (5 or 6 branches)
+   - Sometimes marked with "*" or "Excuse"
+
+SUIT IDENTIFICATION BY SHAPE:
+RED SUITS:
+  ♥ Hearts = curved top, pointed bottom (valentine heart)
+  ♦ Diamonds = four pointed corners (rhombus shape)
+
+BLACK SUITS:
+  ♠ Spades = pointed top + stem (upside-down heart with stem)
+  ♣ Clubs = three lobes at top + stem (clover shape)
+
+CONFIDENCE RATING (1-100):
+- 90-100: Card fully visible, clearly readable
+- 70-89: Card mostly visible, high certainty
+- 50-69: Card partially obscured but identifiable
+- Below 50: Do not include
+
+OUTPUT FORMAT (STRICT):
+For standard suits:
+- rank: "1"-"10", "Jack", "Knight", "Queen", "King"
+- suit: "Hearts", "Diamonds", "Clubs", "Spades"
+
+For trumps:
+- rank: "1"-"21"
+- suit: "Trump"
+
+For Excuse:
+- rank: "Excuse"
+- suit: "Trump"
+
+Return ONLY a JSON array:
+[{"rank": "21", "suit": "Trump", "confidence": 95}, {"rank": "King", "suit": "Hearts", "confidence": 78}, {"rank": "Excuse", "suit": "Trump", "confidence": 90}]
+
+Include ALL cards with confidence >= 50. No other text, just the JSON array.`,
+
+	// Prompt 1: Focus on hard-to-see Tarot cards
+	`You are a specialist at finding PARTIALLY VISIBLE Tarot cards that are easy to miss.
+
+FOCUS AREAS:
+1. IMAGE EDGES - cards cut off at borders
+2. UNDER OTHER CARDS - corners/edges peeking out
+3. FANNED CARDS - only corner index visible
+4. TILTED/ROTATED cards
+
+TAROT DECK (78 cards):
+- Standard suits: 1-10, Valet, Cavalier, Dame, Roi in each suit (HAVE suit symbols)
+- Trumps 1-21: NO suit symbols! Illustrated scenes with number (Arabic 1-21 or Roman I-XXI)
+- Excuse: The Fool (no number, jester figure OR star symbol)
+
+SUIT SHAPES (critical for same-color distinction):
+♥ Hearts = rounded top, pointed bottom
+♦ Diamonds = 4 pointed corners
+♠ Spades = pointed top, stem at bottom
+♣ Clubs = 3 rounded lobes, stem at bottom
+
+OUTPUT FORMAT:
+Standard suits: rank ("1"-"10", "Jack", "Knight", "Queen", "King"), suit ("Hearts"/"Diamonds"/"Clubs"/"Spades")
+Trumps: rank ("1"-"21"), suit ("Trump")
+Excuse: rank ("Excuse"), suit ("Trump")
+
+Return ONLY a JSON array:
+[{"rank": "Knight", "suit": "Clubs", "confidence": 45}, {"rank": "14", "suit": "Trump", "confidence": 85}]
+
+Include cards with confidence >= 30. If none found, return: []`,
+}
+
 // Claude request/response structures for Bedrock API
 type claudeRequest struct {
 	AnthropicVersion string    `json:"anthropic_version"`
@@ -140,6 +227,9 @@ const (
 	RankQueen = "Queen"
 	RankKing  = "King"
 	RankAce   = "Ace"
+	// Tarot-specific ranks
+	RankKnight = "Knight"
+	RankExcuse = "Excuse"
 )
 
 // Standard suit values (API contract)
@@ -148,6 +238,8 @@ const (
 	SuitDiamonds = "Diamonds"
 	SuitClubs    = "Clubs"
 	SuitSpades   = "Spades"
+	// Tarot-specific suit
+	SuitTrump    = "Trump"
 )
 
 // Card represents a playing card with detection confidence
@@ -162,6 +254,7 @@ type Card struct {
 func normalizeRank(rank string) string {
 	r := strings.ToLower(strings.TrimSpace(rank))
 	switch r {
+	// Belote ranks
 	case "7":
 		return RankSeven
 	case "8":
@@ -176,8 +269,48 @@ func normalizeRank(rank string) string {
 		return RankQueen
 	case "k", "king", "r", "roi":
 		return RankKing
-	case "a", "ace", "as", "1":
+	case "a", "ace", "as":
 		return RankAce
+	// Tarot-specific ranks
+	case "c", "cavalier", "knight":
+		return RankKnight
+	case "excuse", "fool", "mat", "star", "*":
+		return RankExcuse
+	// Tarot numbers 1-21 (Arabic and Roman numerals)
+	case "1", "i":
+		return "1"
+	case "2", "ii":
+		return "2"
+	case "3", "iii":
+		return "3"
+	case "4", "iv", "iiii":
+		return "4"
+	case "5":
+		return "5"
+	case "6", "vi":
+		return "6"
+	case "11", "xi":
+		return "11"
+	case "12", "xii":
+		return "12"
+	case "13", "xiii":
+		return "13"
+	case "14", "xiv", "xiiii":
+		return "14"
+	case "15", "xv":
+		return "15"
+	case "16", "xvi":
+		return "16"
+	case "17", "xvii":
+		return "17"
+	case "18", "xviii":
+		return "18"
+	case "19", "xix", "xviiii":
+		return "19"
+	case "20", "xx":
+		return "20"
+	case "21", "xxi":
+		return "21"
 	default:
 		return "" // Invalid rank
 	}
@@ -195,6 +328,9 @@ func normalizeSuit(suit string) string {
 		return SuitClubs
 	case "spades", "spade", "pique", "piques", "♠":
 		return SuitSpades
+	// Tarot-specific
+	case "trump", "trumps", "atout", "atouts":
+		return SuitTrump
 	default:
 		return "" // Invalid suit
 	}
@@ -224,19 +360,28 @@ func NewBedrockService(region, modelID string) (*BedrockService, error) {
 	}, nil
 }
 
-// NumPrompts returns the number of available detection prompts
-func (s *BedrockService) NumPrompts() int {
-	return len(detectionPrompts)
+// getPrompts returns the prompts for the given game type
+func getPrompts(gameType string) []string {
+	if gameType == "tarot" {
+		return tarotPrompts
+	}
+	return belotePrompts
 }
 
-// DetectCards analyzes an image using default prompt (prompt 0)
+// NumPrompts returns the number of available detection prompts for a game type
+func (s *BedrockService) NumPrompts(gameType string) int {
+	return len(getPrompts(gameType))
+}
+
+// DetectCards analyzes an image using default prompt (prompt 0) for Belote
 func (s *BedrockService) DetectCards(ctx context.Context, imageBase64, mediaType string) ([]Card, error) {
-	return s.DetectCardsWithPrompt(ctx, imageBase64, mediaType, 0)
+	return s.DetectCardsWithPrompt(ctx, imageBase64, mediaType, 0, "belote")
 }
 
-// DetectCardsWithPrompt analyzes an image using a specific prompt
-func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64, mediaType string, promptIndex int) ([]Card, error) {
-	if promptIndex < 0 || promptIndex >= len(detectionPrompts) {
+// DetectCardsWithPrompt analyzes an image using a specific prompt for a game type
+func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64, mediaType string, promptIndex int, gameType string) ([]Card, error) {
+	prompts := getPrompts(gameType)
+	if promptIndex < 0 || promptIndex >= len(prompts) {
 		promptIndex = 0
 	}
 
@@ -257,7 +402,7 @@ func (s *BedrockService) DetectCardsWithPrompt(ctx context.Context, imageBase64,
 					},
 					{
 						Type: "text",
-						Text: detectionPrompts[promptIndex],
+						Text: prompts[promptIndex],
 					},
 				},
 			},

@@ -8,6 +8,7 @@ import NewGamePage from '@/pages/NewGamePage';
 import BeloteSetupPage from '@/pages/belote/SetupPage';
 import BeloteGamePage from '@/pages/belote/GamePage';
 import TarotSetupPage from '@/pages/tarot/SetupPage';
+import TarotGamePage from '@/pages/tarot/GamePage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import PWAUpdatePrompt from '@/components/PWAUpdatePrompt';
 import SplashScreen from '@/components/SplashScreen';
@@ -61,6 +62,11 @@ const App = () => {
         <Route path="/tarot/setup" element={
           <ProtectedRoute>
             <TarotSetupPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/tarot/game/:id" element={
+          <ProtectedRoute>
+            <TarotGamePage />
           </ProtectedRoute>
         } />
         <Route path="/" element={<InitialRoute />} />

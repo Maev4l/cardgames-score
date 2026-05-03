@@ -120,12 +120,13 @@ export const deleteGame = async (gameId, type = 'belote') => {
 /**
  * Detect cards from one or more images
  * @param {Array<{image: string, mediaType: string}>} images - Array of base64-encoded images with MIME types
+ * @param {string} type - Game type ('belote' or 'tarot'), affects detection prompts
  * @returns {Promise<{cards: Array<{rank: string, suit: string}>}>} Deduplicated detected cards
  */
-export const detectCards = async (images) => {
+export const detectCards = async (images, type = 'belote') => {
   return apiRequest('/api/detections', {
     method: 'POST',
-    body: JSON.stringify({ images }),
+    body: JSON.stringify({ images, type }),
   });
 };
 
@@ -133,7 +134,8 @@ export const detectCards = async (images) => {
  * Detect cards from a single image (legacy helper)
  * @param {string} imageBase64 - Base64-encoded image data
  * @param {string} mediaType - MIME type (e.g., 'image/jpeg')
+ * @param {string} type - Game type ('belote' or 'tarot')
  */
-export const detectCardsSingle = async (imageBase64, mediaType) => {
-  return detectCards([{ image: imageBase64, mediaType }]);
+export const detectCardsSingle = async (imageBase64, mediaType, type = 'belote') => {
+  return detectCards([{ image: imageBase64, mediaType }], type);
 };

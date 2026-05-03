@@ -19,17 +19,28 @@ type DynamoDBService struct {
 	tableName string
 }
 
-// Game represents a card game session
+// Game represents a card game session (Belote or Tarot)
 type Game struct {
-	PK          string    `dynamodbav:"PK"`
-	SK          string    `dynamodbav:"SK"`
-	ID          string    `dynamodbav:"id" json:"id"`
-	Type        string    `dynamodbav:"type" json:"type"`
-	Status      string    `dynamodbav:"status" json:"status"`
-	Teams       *Teams    `dynamodbav:"teams,omitempty" json:"teams,omitempty"`
-	TargetScore int       `dynamodbav:"targetScore,omitempty" json:"targetScore,omitempty"`
-	CreatedAt   string    `dynamodbav:"createdAt" json:"createdAt"`
-	ExpiresAt   int64     `dynamodbav:"expiresAt" json:"-"`
+	PK          string         `dynamodbav:"PK"`
+	SK          string         `dynamodbav:"SK"`
+	ID          string         `dynamodbav:"id" json:"id"`
+	Type        string         `dynamodbav:"type" json:"type"`
+	Status      string         `dynamodbav:"status" json:"status"`
+	// Belote-specific fields
+	Teams       *Teams         `dynamodbav:"teams,omitempty" json:"teams,omitempty"`
+	TargetScore int            `dynamodbav:"targetScore,omitempty" json:"targetScore,omitempty"`
+	// Tarot-specific fields
+	Players     []TarotPlayer  `dynamodbav:"players,omitempty" json:"players,omitempty"`
+	PlayerCount int            `dynamodbav:"playerCount,omitempty" json:"playerCount,omitempty"`
+	// Common fields
+	CreatedAt   string         `dynamodbav:"createdAt" json:"createdAt"`
+	ExpiresAt   int64          `dynamodbav:"expiresAt" json:"-"`
+}
+
+// TarotPlayer holds name and cumulative score for a Tarot player
+type TarotPlayer struct {
+	Name  string `dynamodbav:"name" json:"name"`
+	Score int    `dynamodbav:"score" json:"score"`
 }
 
 // Teams holds team information for Belote games
@@ -44,7 +55,7 @@ type TeamScore struct {
 	Score int    `dynamodbav:"score" json:"score"`
 }
 
-// Round represents a single round in a game
+// Round represents a single round in a Belote game
 type Round struct {
 	PK        string         `dynamodbav:"PK"`
 	SK        string         `dynamodbav:"SK"`
@@ -55,6 +66,24 @@ type Round struct {
 	Belote    bool           `dynamodbav:"belote" json:"belote"`
 	Capot     bool           `dynamodbav:"capot" json:"capot"`
 	CreatedAt string         `dynamodbav:"createdAt" json:"createdAt"`
+}
+
+// TarotRound represents a single round in a Tarot game
+type TarotRound struct {
+	PK          string         `dynamodbav:"PK"`
+	SK          string         `dynamodbav:"SK"`
+	RoundNum    int            `dynamodbav:"roundNum" json:"roundNum"`
+	Taker       int            `dynamodbav:"taker" json:"taker"`                                 // Player index (0-4)
+	Partner     *int           `dynamodbav:"partner,omitempty" json:"partner,omitempty"`         // Partner index for 5-player
+	Contract    string         `dynamodbav:"contract" json:"contract"`                           // petite|garde|garde_sans|garde_contre
+	Bouts       int            `dynamodbav:"bouts" json:"bouts"`                                 // 0-3 bouts held
+	TakerPoints int            `dynamodbav:"takerPoints" json:"takerPoints"`                     // Points won by taker (0-91)
+	Won         bool           `dynamodbav:"won" json:"won"`                                     // Did taker win?
+	PetitAuBout *string        `dynamodbav:"petitAuBout,omitempty" json:"petitAuBout,omitempty"` // "taker" | "defense"
+	Poignee     int            `dynamodbav:"poignee" json:"poignee"`                             // 0|10|13|15 trumps shown
+	Chelem      *string        `dynamodbav:"chelem,omitempty" json:"chelem,omitempty"`           // "announced" | "achieved"
+	Scores      map[string]int `dynamodbav:"scores" json:"scores"`                               // Player index -> score delta
+	CreatedAt   string         `dynamodbav:"createdAt" json:"createdAt"`
 }
 
 // NewDynamoDBService creates a new DynamoDB service
@@ -301,6 +330,101 @@ func (s *DynamoDBService) DeleteGame(ctx context.Context, userID, gameType, game
 	})
 	if err != nil {
 		return fmt.Errorf("deleting game: %w", err)
+	}
+
+	return nil
+}
+
+// GetTarotGame returns a Tarot game by ID with all its rounds
+func (s *DynamoDBService) GetTarotGame(ctx context.Context, userID, gameID string) (*Game, []TarotRound, error) {
+	// First get the game
+	gamePK := fmt.Sprintf("USER#%s", userID)
+	gameSK := fmt.Sprintf("GAME#tarot#%s", gameID)
+
+	gameResult, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: gamePK},
+			"SK": &types.AttributeValueMemberS{Value: gameSK},
+		},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting tarot game: %w", err)
+	}
+	if gameResult.Item == nil {
+		return nil, nil, nil // Not found
+	}
+
+	var game Game
+	if err := attributevalue.UnmarshalMap(gameResult.Item, &game); err != nil {
+		return nil, nil, fmt.Errorf("unmarshaling tarot game: %w", err)
+	}
+
+	// Then get all rounds
+	roundPK := fmt.Sprintf("GAME#%s", gameID)
+	roundResult, err := s.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              &s.tableName,
+		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: roundPK},
+			":sk": &types.AttributeValueMemberS{Value: "ROUND#"},
+		},
+		ScanIndexForward: aws.Bool(true), // Oldest first (round order)
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("querying tarot rounds: %w", err)
+	}
+
+	rounds := make([]TarotRound, 0, len(roundResult.Items))
+	for _, item := range roundResult.Items {
+		var round TarotRound
+		if err := attributevalue.UnmarshalMap(item, &round); err != nil {
+			return nil, nil, fmt.Errorf("unmarshaling tarot round: %w", err)
+		}
+		rounds = append(rounds, round)
+	}
+
+	return &game, rounds, nil
+}
+
+// AddTarotRound adds a new round to a Tarot game
+func (s *DynamoDBService) AddTarotRound(ctx context.Context, gameID string, round *TarotRound) error {
+	round.PK = fmt.Sprintf("GAME#%s", gameID)
+	round.SK = fmt.Sprintf("ROUND#%03d", round.RoundNum) // Zero-padded for sort order
+	round.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	item, err := attributevalue.MarshalMap(round)
+	if err != nil {
+		return fmt.Errorf("marshaling tarot round: %w", err)
+	}
+
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("putting tarot round: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateTarotGame updates a Tarot game (e.g., player scores)
+func (s *DynamoDBService) UpdateTarotGame(ctx context.Context, userID string, game *Game) error {
+	game.PK = fmt.Sprintf("USER#%s", userID)
+	game.SK = fmt.Sprintf("GAME#tarot#%s", game.ID)
+
+	item, err := attributevalue.MarshalMap(game)
+	if err != nil {
+		return fmt.Errorf("marshaling tarot game: %w", err)
+	}
+
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("putting tarot game: %w", err)
 	}
 
 	return nil

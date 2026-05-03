@@ -64,9 +64,15 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 		}
 	}
 
-	// Determine number of passes (default 1, cap at max prompts)
+	// Determine game type (default: belote)
+	gameType := request.Type
+	if gameType == "" {
+		gameType = "belote"
+	}
+
+	// Determine number of passes (default 1, cap at max prompts for this game type)
 	numPasses := request.Passes
-	maxPrompts := h.bedrock.NumPrompts()
+	maxPrompts := h.bedrock.NumPrompts(gameType)
 	if numPasses <= 0 {
 		numPasses = 1
 	} else if numPasses > maxPrompts {
@@ -96,7 +102,7 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 	for imgIdx, img := range enhancedImages {
 		for passIdx := 0; passIdx < numPasses; passIdx++ {
 			wg.Add(1)
-			go func(imgIndex int, imgData ImageData, promptIndex int) {
+			go func(imgIndex int, imgData ImageData, promptIndex int, gType string) {
 				defer wg.Done()
 
 				cards, err := h.bedrock.DetectCardsWithPrompt(
@@ -104,6 +110,7 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 					imgData.Image,
 					imgData.MediaType,
 					promptIndex,
+					gType,
 				)
 				if err != nil {
 					log.Error().Msgf("Card detection failed for image %d, pass %d: %s", imgIndex, promptIndex, err.Error())
@@ -112,7 +119,7 @@ func (h *HTTPHandler) RequestDetection(c *gin.Context) {
 				}
 
 				resultChan <- detectionResult{imageIndex: imgIndex, promptIndex: promptIndex, cards: cards, err: nil}
-			}(imgIdx, img, passIdx)
+			}(imgIdx, img, passIdx, gameType)
 		}
 	}
 

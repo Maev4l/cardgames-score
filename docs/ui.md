@@ -10,13 +10,17 @@
 /home
   └── List of games (active first, then finished)
   └── FAB "+" → /new-game
-  └── Tap game → /belote/game/:id
+  └── Tap game → /belote/game/:id or /tarot/game/:id
 
 /new-game
   └── Game type selector
-  └── Belote (active) → /belote/setup
-  └── Tarot (disabled, "Coming soon")
+  └── Belote → /belote/setup
+  └── Tarot → /tarot/setup
+```
 
+## Belote Flow
+
+```
 /belote/setup
   └── Team A name (default: "Nous")
   └── Team B name (default: "Eux")
@@ -35,47 +39,90 @@
       - "Validate" button
   └── Round history (collapsible, delete to undo)
   └── Winner popup (auto-shows when target reached)
-      - Trophy icon + winning team name
-      - Final score display
-      - "View Game" to dismiss and stay
-      - "Back to Games" to return to /home
+```
+
+## Tarot Flow
+
+```
+/tarot/setup
+  └── Player count: 3 / 4 / 5 toggle
+  └── Player name inputs (dynamic based on count)
+  └── "Start Game" → creates game → /tarot/game/:id
+
+/tarot/game/:id
+  └── Score header (all players, horizontal scroll)
+  └── Round entry form (if game active):
+      - Taker selector (player buttons)
+      - Partner selector (5-player only)
+      - Called King (5-player only)
+      - Contract selector (Petite/Garde/Garde Sans/Garde Contre)
+      - Bouts selector (0/1/2/3)
+      - Taker points slider (0-91)
+      - Bonuses: Petit au bout, Poignee, Chelem
+      - Score preview (auto-calculated)
+      - "Validate" button
+  └── Round history
+  └── End game button (manual end)
 ```
 
 ## Components
 
-### GameCard
-- Shows team names and scores
+### Shared Components
+
+#### GameCard
+- Shows team/player names and scores
 - Trophy icon for finished games, clock for active
-- Date and target score footer
+- Date footer
 
-### TrumpSelector
-- 4 buttons: ♥ ♦ ♣ ♠
-- Gold border for selected suit
+#### ConfirmModal
+- Generic confirmation dialog
+- Supports danger/warning variants
 
-### TeamToggle
-- Two-button toggle for A/B team selection
-- Ruby background for selected
-
-### RoundHistory
-- Collapsible list of past rounds
-- Shows trump suit, taker, score, bonuses
-- Delete button for undo (active games only)
-
-### CameraCapture
+#### CameraCapture
 - Full-screen camera interface using react-webcam
 - Live camera preview with guide overlay
 - Supports capturing multiple photos before submitting
 - Thumbnails of captured images on left side
-- Sends all images to `/api/detections` (deduplicates cards across images)
+- Sends all images to `/api/detections` with game type
 - Shows loading spinner during analysis
 
-### DetectedCards
+#### DetectedCards
 - Review screen for AI-detected cards
 - Remove misdetected cards
 - Add missing cards manually
 - Shows calculated point total
+- Retake button to capture new images
 
-## Scoring Logic
+### Belote Components
+
+#### TrumpSelector
+- 4 buttons: ♥ ♦ ♣ ♠
+- Gold border for selected suit
+
+#### TeamToggle
+- Two-button toggle for A/B team selection
+- Ruby background for selected
+
+#### RoundHistory
+- Collapsible list of past rounds
+- Shows trump suit, taker, score, bonuses
+- Delete button for undo (active games only)
+
+### Tarot Components
+
+#### PlayerSelector
+- Player name buttons for taker/partner selection
+- Ruby background for selected
+
+#### ContractSelector
+- 4 buttons: Petite (x1), Garde (x2), Garde Sans (x4), Garde Contre (x6)
+- Gold background for selected
+
+#### BoutsSelector
+- 4 buttons: 0, 1, 2, 3
+- Shows required points for each option
+
+## Belote Scoring Logic
 
 ### Base Card Points
 | Card | Normal | Trump |
@@ -96,3 +143,29 @@
 
 ### Win Condition
 First team to reach target score (1000 or 2000) wins.
+
+## Tarot Scoring Logic
+
+### Required Points (by bouts)
+| Bouts | Required |
+|-------|----------|
+| 0 | 56 |
+| 1 | 51 |
+| 2 | 41 |
+| 3 | 36 |
+
+### Contracts
+| Contract | Multiplier |
+|----------|------------|
+| Petite | x1 |
+| Garde | x2 |
+| Garde Sans | x4 |
+| Garde Contre | x6 |
+
+### Bonuses
+- **Petit au bout:** +10 (x multiplier)
+- **Poignee:** +20/+30/+40 for 10/13/15 trumps shown
+- **Chelem:** +200 (achieved) / +400 (announced)
+
+### Win Condition
+Manual end - no target score. Players decide when to stop.

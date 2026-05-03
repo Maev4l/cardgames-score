@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2, SwitchCamera, VideoOff, Send } from 'lucide-react';
 import { detectCards } from '@/lib/api';
 
-const CameraCapture = ({ onCapture, onClose }) => {
+const CameraCapture = ({ onCapture, onClose, gameType = 'belote' }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -16,6 +16,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [capturedImages, setCapturedImages] = useState([]);
   const [permissionStatus, setPermissionStatus] = useState('checking'); // 'checking' | 'granted' | 'prompt' | 'denied'
   const [showCamera, setShowCamera] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null); // Image to show in preview modal
   const webcamRef = useRef(null);
 
   // Check camera permission on mount
@@ -113,13 +114,13 @@ const CameraCapture = ({ onCapture, onClose }) => {
 
     try {
       const images = capturedImages.map(({ image, mediaType }) => ({ image, mediaType }));
-      const result = await detectCards(images);
+      const result = await detectCards(images, gameType);
       onCapture(result.cards || []);
     } catch (err) {
       setError(err.message || 'Failed to detect cards');
       setLoading(false);
     }
-  }, [capturedImages, loading, onCapture]);
+  }, [capturedImages, loading, onCapture, gameType]);
 
   return (
     <div className="fixed inset-0 bg-charcoal z-50 flex flex-col">
@@ -235,11 +236,16 @@ const CameraCapture = ({ onCapture, onClose }) => {
               <div className="absolute left-4 top-4 bottom-4 w-20 flex flex-col gap-2 overflow-y-auto">
                 {capturedImages.map((img, index) => (
                   <div key={index} className="relative">
-                    <img
-                      src={img.preview}
-                      alt={`Capture ${index + 1}`}
-                      className="w-full aspect-[4/3] object-cover rounded border-2 border-ivory/50"
-                    />
+                    <button
+                      onClick={() => setPreviewImage(img.preview)}
+                      className="w-full"
+                    >
+                      <img
+                        src={img.preview}
+                        alt={`Capture ${index + 1}`}
+                        className="w-full aspect-[4/3] object-cover rounded border-2 border-ivory/50 active:border-gold"
+                      />
+                    </button>
                     <button
                       onClick={() => handleRemoveImage(index)}
                       className="absolute top-1 right-1 size-5 bg-ruby/90 rounded-full flex items-center justify-center shadow active:scale-90 transition-transform"
@@ -284,6 +290,27 @@ const CameraCapture = ({ onCapture, onClose }) => {
               <Send className="size-7 text-charcoal" />
             </Button>
           )}
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 size-10 bg-charcoal/50 rounded-full flex items-center justify-center"
+          >
+            <X className="size-6 text-ivory" />
+          </button>
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
