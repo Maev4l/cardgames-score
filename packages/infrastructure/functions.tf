@@ -1,5 +1,5 @@
 module "api" {
-  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.6.0"
+  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.7.1"
   function_name = "cardgames-score-api"
   zip = {
     filename = "../functions/api/dist/api.zip"
@@ -21,14 +21,14 @@ module "api" {
 }
 
 module "api_trigger" {
-  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.6.0"
+  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.7.1"
 
-  function_name = module.api.function_name
-  function_arn  = module.api.function_arn
-  invoke_arn    = module.api.invoke_arn
-  cors          = true
+  # WHY: matches v1.6.0's `${function_name}-http-api` so the underlying
+  # aws_apigatewayv2_api keeps the same `name`, avoiding API replacement
+  # (preserves api_id / api_endpoint that CloudFront depends on).
+  api_name = "cardgames-score-api"
 
-  # Allow CloudFront to reach the API Gateway via execute-api endpoint
+  cors                         = true
   disable_execute_api_endpoint = false
 
   # JWT Authorizer integrated with Cognito User Pool
@@ -38,7 +38,14 @@ module "api_trigger" {
     audience = [local.cognito_client_id]
   }
 
-  routes = [
-    "ANY /api/{proxy+}"
-  ]
+  # v1.7.x supports fan-out across multiple Lambdas behind one HTTP API.
+  # We have a single Lambda; key it as "api".
+  integrations = {
+    api = {
+      function_name = module.api.function_name
+      function_arn  = module.api.function_arn
+      invoke_arn    = module.api.invoke_arn
+      routes        = ["ANY /api/{proxy+}"]
+    }
+  }
 }
