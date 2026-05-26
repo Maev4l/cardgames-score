@@ -1,29 +1,22 @@
 package main
 
 import (
-	"context"
 	"os"
 
 	"cardgames-score.isnan.eu/functions/api/handlers"
 	"cardgames-score.isnan.eu/functions/api/middleware"
 	"cardgames-score.isnan.eu/functions/api/services"
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
-var ginLambda *ginadapter.GinLambdaV2
-
-func init() {
+func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.CORS())
 
-	// Get config from environment
 	region := os.Getenv("REGION")
 	if region == "" {
 		region = "eu-central-1"
@@ -32,46 +25,41 @@ func init() {
 	if gamesTable == "" {
 		gamesTable = "atout-games"
 	}
-	bedrockModel := os.Getenv("BEDROCK_MODEL")
 
-	// Initialize services
-	bedrock, err := services.NewBedrockService(region, bedrockModel)
+	bedrockSvc, err := services.NewBedrockService(region, os.Getenv("BEDROCK_MODEL"))
 	if err != nil {
 		log.Fatal().Msgf("Failed to initialize Bedrock service: %s", err.Error())
 	}
-
-	dynamodb, err := services.NewDynamoDBService(region, gamesTable)
+	dynamoSvc, err := services.NewDynamoDBService(region, gamesTable)
 	if err != nil {
 		log.Fatal().Msgf("Failed to initialize DynamoDB service: %s", err.Error())
 	}
 
-	// Initialize handlers
-	h := handlers.NewHTTPHandler(bedrock)
-	g := handlers.NewGamesHandler(dynamodb)
+	h := handlers.NewHTTPHandler(bedrockSvc)
+	g := handlers.NewGamesHandler(dynamoSvc)
 
-	// Public routes (still require JWT auth via API Gateway)
-	router.POST("/api/detections", h.RequestDetection)
-
-	// Protected routes (require group membership)
-	protected := router.Group("/api")
-	protected.Use(middleware.RequireApproval)
+	// TokenParser must register before RequireApproval — RequireApproval
+	// reads the tokenInfo TokenParser stored in the gin context.
+	api := router.Group("/api")
+	api.Use(middleware.TokenParser())
+	api.Use(middleware.RequireApproval())
 	{
-		protected.POST("/games", g.CreateGame)
-		protected.GET("/games", g.ListGames)
-		protected.GET("/games/:id", g.GetGame)
-		protected.DELETE("/games/:id", g.DeleteGame)
-		protected.POST("/games/:id/rounds", g.AddRound)
-		protected.DELETE("/games/:id/rounds/:num", g.DeleteRound)
-		protected.PATCH("/games/:id", g.UpdateGame)
+		api.POST("/detections", h.RequestDetection)
+
+		api.POST("/games", g.CreateGame)
+		api.GET("/games", g.ListGames)
+		api.GET("/games/:id", g.GetGame)
+		api.DELETE("/games/:id", g.DeleteGame)
+		api.POST("/games/:id/rounds", g.AddRound)
+		api.DELETE("/games/:id/rounds/:num", g.DeleteRound)
+		api.PATCH("/games/:id", g.UpdateGame)
 	}
 
-	ginLambda = ginadapter.NewV2(router)
-}
-
-func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	return ginLambda.ProxyWithContext(ctx, req)
-}
-
-func main() {
-	lambda.Start(handler)
+	// LWA forwards Lambda events to this port on 127.0.0.1.
+	// Locally (no LWA) the same default lets `go run ./api/cmd` work.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	_ = router.Run(":" + port)
 }
