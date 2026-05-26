@@ -1,80 +1,85 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/awslabs/aws-lambda-go-api-proxy/core"
 	"github.com/gin-gonic/gin"
+	"github.com/lestrrat-go/jwx/jwt"
 )
 
 const (
-	// UserIDKey is the context key for storing the authenticated user ID
-	UserIDKey = "userId"
-	// RequiredGroup is the Cognito group required for API access
+	UserIDKey     = "userId"
+	tokenInfoKey  = "tokenInfo"
 	RequiredGroup = "cardgames-score"
 )
 
-// RequireApproval middleware checks that the user belongs to the approved group
-// User claims are extracted from API Gateway Lambda authorizer context
-func RequireApproval(c *gin.Context) {
-	// Get the Lambda request context from the request's context
-	reqCtx, ok := core.GetAPIGatewayV2ContextFromContext(c.Request.Context())
-	if !ok {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"message": "Missing authorization context",
-		})
-		return
-	}
-
-	// Extract user ID from JWT claims (sub claim)
-	userID := reqCtx.Authorizer.JWT.Claims["sub"]
-	if userID == "" {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"message": "Missing user ID in token",
-		})
-		return
-	}
-
-	// Check cognito:groups claim for required group membership
-	groups := reqCtx.Authorizer.JWT.Claims["cognito:groups"]
-	if !containsGroup(groups, RequiredGroup) {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"message": "User not approved for this application",
-		})
-		return
-	}
-
-	// Store user ID in context for handlers
-	c.Set(UserIDKey, userID)
-	c.Next()
+type tokenInfo struct {
+	userID string
+	groups string
 }
 
-// containsGroup checks if the groups claim contains the required group
-// Groups claim can be a string (single group) or array format
+// API Gateway has already validated the JWT signature/expiry upstream; this
+// only decodes claims. TokenParser must register before RequireApproval —
+// RequireApproval calls MustGet(tokenInfoKey).
+func TokenParser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw := c.Request.Header.Get("Authorization")
+		if strings.HasPrefix(raw, "Bearer ") {
+			raw = raw[7:]
+		}
+
+		var info tokenInfo
+		if tok, err := jwt.Parse([]byte(raw)); err == nil && tok != nil {
+			if sub, ok := tok.Get("sub"); ok {
+				info.userID = fmt.Sprintf("%v", sub)
+			}
+			if g, ok := tok.Get("cognito:groups"); ok {
+				info.groups = fmt.Sprintf("%v", g)
+			}
+		}
+		c.Set(tokenInfoKey, &info)
+		c.Next()
+	}
+}
+
+func RequireApproval() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		t, ok := c.MustGet(tokenInfoKey).(*tokenInfo)
+		if !ok || t.userID == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "Missing user ID in token"})
+			return
+		}
+		if !containsGroup(t.groups, RequiredGroup) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "User not approved for this application"})
+			return
+		}
+		c.Set(UserIDKey, t.userID)
+		c.Next()
+	}
+}
+
+// Cognito serializes the groups claim either as a single string or as a
+// bracketed space-separated list, e.g. "[group1 group2]". Handle both.
 func containsGroup(groups, required string) bool {
 	if groups == "" {
 		return false
 	}
-
-	// Handle both single group and array format from JWT
-	// Array format: "[group1, group2]" or "group1 group2"
 	groups = strings.Trim(groups, "[]")
 	for _, g := range strings.Split(groups, " ") {
-		g = strings.Trim(g, ", ")
-		if g == required {
+		if strings.Trim(g, ", ") == required {
 			return true
 		}
 	}
-
 	return groups == required
 }
 
-// GetUserID retrieves the authenticated user ID from the Gin context
 func GetUserID(c *gin.Context) string {
-	userID, _ := c.Get(UserIDKey)
-	if id, ok := userID.(string); ok {
-		return id
+	if v, ok := c.Get(UserIDKey); ok {
+		if id, ok := v.(string); ok {
+			return id
+		}
 	}
 	return ""
 }
