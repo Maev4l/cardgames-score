@@ -1,4 +1,4 @@
-.PHONY: build package build-api clean
+.PHONY: build package build-api clean run-api-local
 
 BIN_DIR := bin
 PACKAGE_DIR := dist
@@ -21,3 +21,10 @@ package: package-api
 
 clean:
 	rm -rf api/$(BIN_DIR) api/$(PACKAGE_DIR)
+
+# Run the API lambda locally as a plain HTTP server (Web Adapter mode).
+# Requires AWS credentials in the environment (e.g. `aws sso login`)
+# and env vars sourced from api/.env.local (copy from .env.local.example).
+run-api-local:
+	@test -f api/.env.local || (echo "Missing api/.env.local — copy from api/.env.local.example"; exit 1)
+	@set -a && . ./api/.env.local && set +a && go run ./api/cmd

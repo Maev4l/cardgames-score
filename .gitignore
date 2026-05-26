@@ -10,3 +10,6 @@ node_modules/
 tfplan
 
 output.json
+
+# Local dev env files (per-developer secrets/values)
+**/.env.local
