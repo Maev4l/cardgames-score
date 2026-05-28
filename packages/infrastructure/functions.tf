@@ -1,6 +1,19 @@
+locals {
+  # AWS Lambda Web Adapter (arm64) - publisher account 753240598075.
+  # Bump intentionally; release notes:
+  # https://github.com/aws/aws-lambda-web-adapter/releases
+  lwa_layer_version = 27
+  lwa_layer_arn     = "arn:aws:lambda:${var.region}:753240598075:layer:LambdaAdapterLayerArm64:${local.lwa_layer_version}"
+}
+
 module "api" {
   source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.7.1"
   function_name = "cardgames-score-api"
+
+  # AWS Lambda Web Adapter (arm64). The layer's Extension intercepts the
+  # Lambda runtime API and forwards events as HTTP requests to PORT.
+  layers = [local.lwa_layer_arn]
+
   zip = {
     filename = "../functions/api/dist/api.zip"
     runtime  = "provided.al2023"
@@ -15,6 +28,11 @@ module "api" {
     GAMES_TABLE   = aws_dynamodb_table.games.name
     REGION        = var.region
     BEDROCK_MODEL = var.bedrock_model
+
+    # AWS Lambda Web Adapter forwards events to this port on 127.0.0.1.
+    # Must match the port the Gin server binds to in api/cmd/main.go.
+    PORT                = "8080"
+    AWS_LWA_INVOKE_MODE = "buffered"
   }
 
   additional_policy_arns = [aws_iam_policy.api.arn]
