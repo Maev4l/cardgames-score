@@ -14,16 +14,16 @@ A PWA for tracking card game scores (French Belote and Tarot).
 
 ```bash
 # Infrastructure
-yarn infra:plan          # Preview infrastructure changes
-yarn infra:apply         # Apply infrastructure changes
+make infra-plan          # Preview infrastructure changes
+make infra-apply         # Apply infrastructure changes
 
 # Backend
-yarn backend:build       # Build Go Lambda (creates api.zip)
+make backend-build       # Build Go Lambda (creates api.zip)
 
 # Frontend
-yarn frontend:serve      # Local dev server (port 5176)
-yarn frontend:build      # Production build
-yarn frontend:deploy     # Build, sync to S3, invalidate CloudFront
+make frontend-serve      # Local dev server (port 5176)
+make frontend-build      # Production build
+make frontend-deploy     # Build, sync to S3, invalidate CloudFront
 ```
 
 ## Documentation
