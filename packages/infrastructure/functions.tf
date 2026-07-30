@@ -7,7 +7,7 @@ locals {
 }
 
 module "api" {
-  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.7.1"
+  source        = "github.com/Maev4l/terraform-modules//modules/lambda-function?ref=v1.8.1"
   function_name = "cardgames-score-api"
 
   # AWS Lambda Web Adapter (arm64). The layer's Extension intercepts the
@@ -39,7 +39,7 @@ module "api" {
 }
 
 module "api_trigger" {
-  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.7.1"
+  source = "github.com/Maev4l/terraform-modules//modules/lambda-trigger-apigw?ref=v1.8.1"
 
   # WHY: matches v1.6.0's `${function_name}-http-api` so the underlying
   # aws_apigatewayv2_api keeps the same `name`, avoiding API replacement
